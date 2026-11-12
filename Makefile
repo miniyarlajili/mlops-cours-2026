@@ -48,8 +48,16 @@ prefetch: ## Avant la séance du Lab 0 : télécharge les images du socle (~3 Go
 preload: ## Charge dans les nœuds kind les images déjà présentes sur le poste
 	for img in $(CLUSTER_IMAGES); do
 	  if docker image inspect "$$img" >/dev/null 2>&1; then
-	    kind load docker-image --name $(KIND_CLUSTER_NAME) "$$img" \
-	      || echo "  (chargement impossible pour $$img : il sera téléchargé par le cluster)"
+	    kind load docker-image --name $(KIND_CLUSTER_NAME) "$$img" || {
+	      # kind load échoue parfois (« content digest ... not found ») : import direct,
+	      # limité à l'architecture du poste, dans chaque nœud
+	      echo "  kind load impossible pour $$img : import direct dans les nœuds"
+	      for n in $$(kind get nodes --name $(KIND_CLUSTER_NAME)); do
+	        docker save --platform linux/amd64 "$$img" \
+	          | docker exec -i "$$n" ctr --namespace=k8s.io images import - >/dev/null \
+	          || echo "  (import impossible sur $$n : l'image sera téléchargée par le cluster)"
+	      done
+	    }
 	  fi
 	done
 
@@ -61,6 +69,10 @@ pf: ## Port-forwards : S3 :8333, filer :8888, MLflow :5000 (en arrière-plan)
 	mkdir -p $(PF_LOG)
 	pkill -f "^kubectl .*port-forward svc/s3 8333" || true
 	pkill -f "^kubectl .*port-forward svc/mlflow 5000" || true
+	# Après un redémarrage de la VM, attendre que SeaweedFS et MLflow soient prêts :
+	# un port-forward lancé trop tôt s'arrête (« lost connection to pod »).
+	kubectl --context $(KCTX) -n storage rollout status deploy/seaweedfs --timeout=300s || true
+	kubectl --context $(KCTX) -n mlflow rollout status deploy/mlflow --timeout=300s || true
 	nohup kubectl --context $(KCTX) -n storage port-forward svc/s3 8333:8333 8888:8888 >$(PF_LOG)/s3.log 2>&1 &
 	nohup kubectl --context $(KCTX) -n mlflow  port-forward svc/mlflow 5000:5000      >$(PF_LOG)/mlflow.log 2>&1 &
 	sleep 3

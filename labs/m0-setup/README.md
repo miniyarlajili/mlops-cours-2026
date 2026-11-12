@@ -150,7 +150,7 @@ sans laisser de trace. Trois outils pour le piloter :
 |---|---|---|
 | **kubectl** | la télécommande du cluster | `kubectl get nodes`, `kubectl get pods -A` |
 | **k9s** | le tableau de bord, dans le terminal | `k9s` puis `:pods`, `q` pour quitter |
-| **helm** | le « magasin d'applications » de Kubernetes | utilisé à partir du Lab 2 |
+| **helm** | le « magasin d'applications » de Kubernetes | utilisé dans les labs suivants |
 
 ![Kubernetes en une image](img/03-kubernetes.png)
 
@@ -230,9 +230,8 @@ projets. Une commande suffit : `uv sync`.
 
 > [!CAUTION]
 > **16 Go de RAM : vérifiez votre poste dès aujourd'hui**
-> 8 Go suffisent pour les Labs 0 et 1, pas au-delà : Kubeflow Pipelines (Lab 2), KServe
-> (Lab 5), Argo CD (Lab 6) et la stack de monitoring (Lab 7) s'ajoutent au même cluster, qui
-> demande alors 10 à 12 Go alloués à Docker. Découvrir la limite en semaine 4 est trop tard.
+> 8 Go suffisent pour les Labs 0 et 1, pas au-delà : les labs suivants ajoutent plusieurs
+> services au même cluster, qui demande alors 10 à 12 Go alloués à Docker. Découvrir la limite en semaine 4 est trop tard.
 > Si votre poste a moins de 16 Go, signalez-le **dès la première séance** : poste de l'école,
 > machine virtuelle fournie par l'établissement, ou travail sur le poste du membre du binôme qui
 > a 16 Go (chacun garde son compte GitHub et commite sous son nom). Le même poste de repli sert
@@ -443,7 +442,7 @@ Deux possibilités :
 | Bouton GitHub | **Fork** > Create fork | **Use this template** > Create a new repository, case « Include all branches » **décochée** |
 | Visibilité | Public | Public ou privé |
 | Récupérer les mises à jour du cours | Bouton « Sync fork », ou la commande de l'encadré ci-dessous | La commande de l'encadré ci-dessous (historique indépendant) |
-| GitHub Actions (Lab 6) | À activer une fois dans l'onglet Actions | Actives d'emblée |
+| GitHub Actions | À activer une fois dans l'onglet Actions | Actives d'emblée |
 
 Dans les deux cas, gardez le nom **`mlops-cours-2026`** : les scripts de vérification et les
 énoncés le supposent.
@@ -579,7 +578,7 @@ MLFLOW_ENABLE_PROXY_MULTIPART_UPLOAD=false
 MLFLOW_DISABLE_TELEMETRY=true
 DO_NOT_TRACK=true
 
-# Lab 6 (étape 6.2) : jeton du webhook de ré-entraînement continu
+# Utilisé dans un lab suivant
 # CT_WEBHOOK_TOKEN=
 ```
 
@@ -587,7 +586,7 @@ Les deux variables de télémétrie empêchent les outils d'envoyer des statisti
 éditeurs : MLflow 3 contacte sinon un service de télémétrie à chaque run
 (`MLFLOW_DISABLE_TELEMETRY`), et `DO_NOT_TRACK` est la convention commune respectée par d'autres
 outils du cours (Evidently…). Utile en salle de TP sans accès Internet, et un bon réflexe de
-confidentialité. La dernière ligne, commentée, servira au Lab 6.
+confidentialité. La dernière ligne, commentée, servira plus tard.
 
 > [!CAUTION]
 > **Ne jamais commiter `.env`**
@@ -613,7 +612,7 @@ léger pour une machine de TP).
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 name: mlops-lab
-# Registry local (localhost:5001) — utilisé dès le Lab 2 (image du pipeline).
+# Registry local (localhost:5001) — pour vos propres images, dans les labs suivants.
 # Le patch n'est plus nécessaire avec les images kind >= v0.27 mais reste inoffensif.
 containerdConfigPatches:
   - |-
@@ -622,13 +621,13 @@ containerdConfigPatches:
 nodes:
   - role: control-plane
     extraPortMappings:
-      - containerPort: 80       # Ingress HTTP (Labs 5+)
+      - containerPort: 80       # Ingress HTTP (labs suivants)
         hostPort: 80
         protocol: TCP
       - containerPort: 443      # Ingress HTTPS
         hostPort: 443
         protocol: TCP
-      - containerPort: 30080    # NodePort Kourier / KServe (Lab 5)
+      - containerPort: 30080    # NodePort réservé à un lab suivant
         hostPort: 30080
         protocol: TCP
   - role: worker
@@ -636,8 +635,8 @@ nodes:
 ```
 
 - `extraPortMappings` : les ports 80 et 443 du poste sont reliés au control-plane, pour exposer
-  plus tard un Ingress ; le port 30080 servira au Lab 5 (NodePort de la passerelle Kourier /
-  KServe).
+  plus tard un Ingress ; le port 30080 est réservé à un
+  lab suivant.
 - `containerdConfigPatches` : indique à containerd (le runtime des nœuds) de lire la configuration
   des registries dans `/etc/containerd/certs.d`. C'est ce qui permettra aux nœuds de tirer des
   images depuis le registry local `localhost:5001`.
@@ -711,9 +710,8 @@ Ce script suit la recette officielle de kind et fait cinq choses :
 5. **ConfigMap `local-registry-hosting`** : documente le registry pour les outils qui savent le
    découvrir (KEP-1755).
 
-Ce registry sert **dès le Lab 2** : l'image du pipeline Kubeflow
-(`localhost:5001/scoring-pipeline:<version>`), puis, à partir du Lab 4 (packaging), l'image de
-l'API de prédiction (`localhost:5001/scoring-api:<version>`) ; vous les y pousserez avant de les
+Ce registry accueillera **les images que vous construirez** dans les labs suivants ; vous les y
+pousserez avant de les
 déployer.
 
 ### 4.3 Créer le cluster
@@ -784,8 +782,7 @@ cours.
 Les promotions précédentes utilisaient MinIO. Son édition communautaire a été archivée et ses
 images retirées de Docker Hub en 2026 : les anciens manifests ne démarrent plus. Le cours utilise
 désormais **SeaweedFS** : licence Apache 2.0, même API S3 (signature v4), et stockage par défaut de
-**Kubeflow Pipelines depuis la version 2.15** — une seule technologie S3 pour tout le cours, y
-compris le stockage interne de Kubeflow au Lab 2.
+**Kubeflow Pipelines depuis la version 2.15** — une seule technologie S3 pour tout le cours.
 
 > [!NOTE]
 > **Pourquoi un S3 local et pas un vrai S3 AWS ?**
@@ -1024,7 +1021,7 @@ kubectl -n storage logs job/create-buckets
 ### 5.4 Déployer MLflow
 
 Le cours utilise **un seul serveur MLflow**, dans le cluster, partagé par tous les labs : votre
-poste, les pipelines Kubeflow (Lab 2), la CI (Lab 6) y enregistrent leurs expériences. Un serveur
+poste et les outils des labs suivants y enregistrent leurs expériences. Un serveur
 MLflow distingue deux stockages :
 
 - le **backend store** : les métadonnées (expériences, runs, paramètres, métriques, registre de
@@ -1213,14 +1210,13 @@ Ouvrez `pyproject.toml` pour voir ce qui a été installé : un **environnement 
 socle du cours (Labs 0 à 8), installé une fois pour toutes aujourd'hui.
 
 - les **dépendances du socle**, regroupées par lab dans le fichier : `mlflow`, `dvc[s3]`, `boto3`,
-  `pandas`, `scikit-learn`, `feast` (Lab 1), `kfp` (Lab 2), `great-expectations`, `evidently`
-  (Lab 3), `onnxruntime`, `fastapi`, `bentoml` (Lab 4), `locust` (Labs 4-5), `prometheus-client`
-  (Lab 7), `fairlearn`, `shap`, `modelscan` (Lab 8)… ;
+  `pandas`, `scikit-learn`… et les bibliothèques des labs suivants, déjà figées pour éviter
+  les conflits de versions en cours de route ;
 - le groupe **`dev`**, installé par défaut : `ruff` (lint/format), `pytest`, `yamllint`.
 
 Aucun lab ne vous fera réinstaller quoi que ce soit : `uv sync`, sans option, suffit toujours.
-Seul le Lab 9 (RAG, LLM) a son propre projet Python, isolé dans `rag/` (`rag/pyproject.toml`) :
-ses dépendances (LangChain, Ragas, Phoenix…) ne se mélangent pas au socle.
+Seul le Lab 9 a son propre projet Python, isolé dans `rag/` (`rag/pyproject.toml`) : ses
+dépendances ne se mélangent pas au socle.
 
 > [!WARNING]
 > **`uv sync` synchronise exactement**
@@ -1389,8 +1385,8 @@ dossier de l'énoncé (`lab/m0-setup` aujourd'hui, `lab/m1-versioning` au Lab 1�
 de lab depuis `main` à jour. En fin de lab, la branche est poussée sur GitHub et fusionnée dans
 `main` par une **pull request** relue et approuvée par le partenaire du binôme : `main` ne
 contient que du travail relu, et l'historique montre qui a fait quoi (il compte dans la note du
-mini-projet). Seuls les commits automatiques des outils GitOps (CI, déploiements, à partir du
-Lab 6) arrivent directement sur `main`.
+mini-projet). Seuls les commits automatiques de certains outils, plus tard, arriveront directement
+sur `main`.
 
 Créez la branche, ajoutez un fichier de notes personnelles et commitez votre smoke test :
 
@@ -1545,6 +1541,7 @@ repo du cours.
 
 | Symptôme | Cause probable | Solution |
 |---|---|---|
+| VM du cours très lente, `vagrant up` en *Timed out while waiting for the machine to boot*, icône « tortue » dans VirtualBox | Hyper-V ou l'intégrité de la mémoire (VBS) actifs sous Windows : VirtualBox passe dans un mode lent (« NEM »). Vérifier : `Select-String -Path "$env:USERPROFILE\VirtualBox VMs\mlops-vm\Logs\VBox.log" -Pattern "fall back to NEM"` (une ligne = mode lent) ; `bcdedit /enum | findstr hypervisorlaunchtype` (PowerShell administrateur) | PowerShell administrateur : `bcdedit /set hypervisorlaunchtype off` ; Sécurité Windows > Sécurité de l'appareil > Isolation du noyau > Intégrité de la mémoire : désactivée ; « Activer ou désactiver des fonctionnalités Windows » : décocher Hyper-V, Plateforme de machine virtuelle, Plateforme de l'hyperviseur Windows ; redémarrer. Cela coupe aussi WSL2, Docker Desktop et le bac à sable Windows. Puis `vagrant up`. |
 | `docker: permission denied` | Utilisateur pas dans le groupe `docker`. | `sudo usermod -aG docker $USER` puis `newgrp docker`. |
 | `kind create cluster` bloque sur « Preparing nodes » | Pas assez de RAM/CPU alloués à Docker Desktop. | Augmenter à 6 Go RAM / 4 CPU dans Settings > Resources. |
 | `Port 80/443 already in use` (ou 30080) | Apache, nginx ou IIS tourne déjà. | `sudo systemctl stop apache2` (ou commenter le mapping dans `infra/kind/kind-config.yaml`). |
@@ -1570,7 +1567,8 @@ repo du cours.
 | VM Vagrant : `docker: permission denied` ou `uv: command not found` | Session SSH ouverte pendant le provisioning. | `exit` puis `vagrant ssh`. |
 | `vagrant up` : `timeout during server version negotiating` (SSH) | La VM démarre encore, ou le PC est surchargé (autres applications, Hyper-V/WSL2 actifs). | Attendre 1 minute, fermer les applications lourdes, puis `vagrant halt` et `vagrant up --provision`. Si le message revient : `vagrant provision`. |
 | `vagrant up` ou `make prefetch` : `no space left on device` | Le disque du poste est plein (la VM et les images demandent plusieurs dizaines de Go). | Libérer de la place, puis `vagrant destroy -f` et `vagrant up` ; VirtualBox peut aussi stocker les VM sur un autre disque (Fichier > Préférences > Dossier par défaut des machines). |
-| `make preload` : `ctr: content digest ... not found` | Import d'une image dans un nœud kind impossible. Sans gravité. | Rien à faire : le cluster télécharge lui-même l'image. |
+| `make preload` : `ctr: content digest ... not found`, ou `make preload` très long | `kind load` n'arrive pas à copier une image (archive multi-architecture). | Mettre à jour le cours (`git fetch upstream && git checkout upstream/main -- Makefile`) : `make preload` fait alors un import direct. À la main, dans la VM : `for img in ghcr.io/chrislusf/seaweedfs:4.48 ghcr.io/mlflow/mlflow:v3.16.1 amazon/aws-cli:2.37.9; do for n in $(kind get nodes --name mlops-lab); do docker save --platform linux/amd64 "$img" \| docker exec -i "$n" ctr --namespace=k8s.io images import -; done; done`, puis `make storage` et `make mlflow`. |
+| Pods SeaweedFS ou MLflow en `ImagePullBackOff` ; `docker pull` de `ghcr.io/…` très lent ou en échec | Le DNS du réseau résout mal `ghcr.io` ou `pkg-containers.githubusercontent.com`. | Importer les images comme ci-dessus (elles sont déjà sur le poste après `make prefetch`). Si `make prefetch` échoue aussi : DNS public dans la VM (`sudo mkdir -p /etc/systemd/resolved.conf.d && printf '[Resolve]\nDNS=1.1.1.1 8.8.8.8\n' \| sudo tee /etc/systemd/resolved.conf.d/dns.conf && sudo systemctl restart systemd-resolved docker`, puis `docker start` des nœuds), ou essayer un autre réseau (partage de connexion). |
 | `kubectl get nodes` : un nœud `NotReady` | Nœud kind (conteneur Docker) bloqué, souvent faute de mémoire. | `docker restart mlops-lab-worker2` (ou le nœud concerné), attendre 1 minute, puis `kubectl get nodes`. |
 
 > [!NOTE]
@@ -1593,18 +1591,6 @@ repo du cours.
 - Serveur MLflow, backend store et proxy d'artefacts :
   [https://mlflow.org/docs/latest/self-hosting/architecture/tracking-server/](https://mlflow.org/docs/latest/self-hosting/architecture/tracking-server/)
 - DVC user guide : [https://dvc.org/doc/user-guide](https://dvc.org/doc/user-guide)
-
-> [!NOTE]
-> **Prochaine séance**
-> Lab 1 — Versionner un projet ML end-to-end. Vous poserez le projet fil rouge de credit scoring
-> (contrat `dataset.yaml`, jeu *German Credit*) sur la stack que vous venez de monter : données
-> versionnées avec DVC (remote `s3://dvc-store/scoring`), 20+ expériences scikit-learn tracées dans
-> le serveur MLflow du cluster (expérience `scoring`), promotion du meilleur modèle dans le Model
-> Registry (`scoring-model@champion`), pipeline `dvc repro` et feature store Feast.
-> Préparez le terrain : gardez le cluster kind actif entre les séances (il ne consomme presque rien
-> quand il est inactif). Au début de chaque séance : `kubectl get nodes`, puis `make pf`. Votre
-> binôme préfère un autre jeu de données que *German Credit* ? Proposez-le à l'enseignant avant
-> la séance du Lab 1 (guide du mini-projet, `labs/m10-capstone/README.md`).
 
 ## Vérification automatique
 
