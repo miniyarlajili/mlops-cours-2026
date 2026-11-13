@@ -1,18 +1,20 @@
-"""Lab 0 — test de fumée MLflow : un run, une métrique, un artefact."""
+"""Smoke test MLflow : logge un run (paramètre, métriques, artefact) sur le serveur."""
+
 import os
-import tempfile
-from pathlib import Path
 
 import mlflow
 
+# Serveur MLflow du cluster, exposé sur le poste par `make pf` (voir .env).
 mlflow.set_tracking_uri(os.environ.get("MLFLOW_TRACKING_URI", "http://localhost:5000"))
 mlflow.set_experiment("smoke-test")
 
 with mlflow.start_run(run_name="hello-mlops") as run:
-    mlflow.log_param("lab", "m0-setup")
+    mlflow.log_param("framework", "scikit-learn")
     mlflow.log_metric("accuracy", 0.42)
-    with tempfile.TemporaryDirectory() as dossier:
-        fichier = Path(dossier) / "hello.txt"
-        fichier.write_text("hello mlops\n", encoding="utf-8")
-        mlflow.log_artifact(str(fichier))   # envoyé à S3 via le serveur MLflow
-    print("run créé :", run.info.run_id)
+    mlflow.log_metric("loss", 1.337)
+    # L'artefact passe par le serveur MLflow (mode proxy) jusqu'au bucket S3
+    # mlflow-artifacts : le client n'a besoin d'aucun identifiant S3.
+    mlflow.log_text("hello mlops\n", "hello.txt")
+    print("Run logged successfully.")
+    print(f"run_id       : {run.info.run_id}")
+    print(f"artifact_uri : {run.info.artifact_uri}")
