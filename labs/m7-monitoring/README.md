@@ -184,7 +184,7 @@ relira (étape 6) : c'est le « 4e pilier » de l'observabilité ML, les événe
 > Une demande de crédit décrit une personne (âge, situation familiale, nationalité). La
 > journaliser est légitime pour surveiller le modèle, à condition de le limiter : rétention
 > courte (72 h dans Loki, étape 7), accès restreint, pas d'identifiant direct (l'API n'en
-> reçoit pas). `LOG_PREDICTIONS=false` coupe le journal. Le Lab 8 revient sur le RGPD.
+> reçoit pas). `LOG_PREDICTIONS=false` coupe le journal.
 
 ### 1.3 Modifier `packaging/app/serve.py`
 
@@ -282,7 +282,7 @@ SCORES = Histogram(
 )
 GROUP_PREDICTIONS = Counter(
     "ml_predictions_by_group_total",
-    "Décisions par groupe d'un attribut sensible de dataset.yaml (équité, Lab 8)",
+    "Décisions par groupe d'un attribut sensible de dataset.yaml (équité)",
     ["attribute", "group", "outcome"],
     registry=REGISTRY,
 )
@@ -312,7 +312,7 @@ _known_groups: dict[str, set[str]] = {s.column: set() for s in SENSITIVE}
 
 
 def group_of(s, value: Any) -> str:
-    """Groupe d'une valeur, avec le découpage du Lab 8 (SensitiveAttribute.groups).
+    """Groupe d'une valeur, avec le découpage de dataset.yaml (SensitiveAttribute.groups).
 
     Réécrit sans pandas : pd.cut coûte ~0,6 ms par appel, six fois l'inférence ONNX.
     bins=[0, 25, 120] et right=False : [0, 25) -> labels[0], [25, 120) -> labels[1].
@@ -495,7 +495,7 @@ Ce qui a changé par rapport au Lab 6 :
   (`/predict`, jamais l'URL brute) et le code de réponse : les erreurs de validation (`422`)
   sont un signal de qualité de données, les `5xx` un signal de disponibilité.
 - **`observe()`** alimente les métriques métier et le journal. Le découpage par groupe
-  (`group_of`) reproduit exactement celui du Lab 8 (`SensitiveAttribute.groups`) mais sans
+  (`group_of`) reproduit exactement celui de `dataset.yaml` (`SensitiveAttribute.groups`) mais sans
   pandas : `pd.cut` coûte 0,6 ms par appel, six fois l'inférence ONNX.
 - **Un registre propre au module** (`REGISTRY`, avec les métriques du processus : mémoire,
   CPU, version de Python) plutôt que le registre global de `prometheus-client` : les tests du
@@ -562,8 +562,8 @@ uv run pytest tests/test_monitoring.py -v
 
 > **Sortie attendue :** `13 passed`. Les trois premiers tests interrogent l'API en mémoire
 > (`TestClient`) : `/metrics` répond `200` (pas de redirection), les métriques métier sont
-> présentes, une requête invalide est comptée en `422`, et les groupes de l'API sont ceux du
-> Lab 8. Ils servent le vrai modèle (`packaging/model/`), ou le mini-modèle des tests du
+> présentes, une requête invalide est comptée en `422`, et les groupes de l'API sont ceux de
+> `dataset.yaml`. Ils servent le vrai modèle (`packaging/model/`), ou le mini-modèle des tests du
 > Lab 6 si ceux-ci ont déjà importé l'API (`uv run pytest` lance tout : une quarantaine de
 > tests). Les suivants testent le générateur de trafic et l'analyse de canary (étapes 5 et
 > 10). Ils tournent aussi dans la CI du Lab 6 : une régression d'observabilité bloque désormais
@@ -2201,16 +2201,43 @@ puis `git switch main && git pull` : `make check-m7` se lance de là.
 | 15 | Canary analysé | `reports/m7/canary-analysis.md` | décision appliquée par commit | ☐ |
 | 16 | Rapport | `reports/rapport-m7.md` | 6 sections remplies | ☐ |
 
+## Mission autonome (25 min, 4 points)
+
+**Un incident invisible sur vos tableaux de bord.**
+
+Imaginez une panne que vos métriques, vos alertes et votre dashboard ne détectent pas
+aujourd'hui : l'API répond 200 mais toujours le même score, un groupe de clients reçoit
+soudain beaucoup plus de refus, une variable arrive vide et prend une valeur par défaut…
+
+Provoquez-la sur votre cluster, montrez qu'aucune alerte ne se déclenche, puis ajoutez ce qui
+la rend visible : une métrique, une règle d'alerte avec son runbook, ou un panneau Grafana.
+Rejouez l'incident et montrez l'alerte qui se déclenche, puis qui se résout.
+
+**Règles communes**
+- Aucun code n'est fourni : à vous de trouver la démarche. Documentation officielle des outils,
+  code des labs précédents et `--help` autorisés.
+- Durée visée : 25 minutes en binôme. Les deux noms figurent dans le compte rendu.
+- Livrable : `reports/mission-m7.md`, commité dans la PR du lab, avec quatre sections :
+  1. **Le problème** : ce que vous avez trouvé, en une ou deux phrases ;
+  2. **La démarche** : ce que vous avez essayé, y compris ce qui n'a pas marché ;
+  3. **La preuve** : les commandes et les sorties, **avant** et **après** votre changement ;
+  4. **Les limites** : ce que votre solution ne couvre pas.
+- Tout ce que vérifiait déjà `make check-m7` doit rester vert.
+
+**Notation (4 points)** : incident réaliste et silencieux, prouvé (1) ; détection ajoutée et
+versionnée (1,5) ; alerte déclenchée puis résolue (1) ; runbook clair (0,5).
+
 ## Critères d'évaluation (noté sur 20)
 
 | Critère | Description | Points |
 |---|---|---|
-| Instrumentation API | Endpoint `/metrics`, compteurs + 2 histogrammes, labels pertinents et bornés, groupes sensibles, tests | 4 |
-| Stack Prometheus/Grafana | Stack installée, PodMonitor scrape chaque révision, dashboard versionné et complet | 4 |
-| Evidently en continu | CronJob fonctionnel sur les vraies demandes, référence DVC, métriques dans Prometheus | 4 |
+| Instrumentation API | Endpoint `/metrics`, compteurs + 2 histogrammes, labels pertinents et bornés, groupes sensibles, tests | 3 |
+| Stack Prometheus/Grafana | Stack installée, PodMonitor scrape chaque révision, dashboard versionné et complet | 3 |
+| Evidently en continu | CronJob fonctionnel sur les vraies demandes, référence DVC, métriques dans Prometheus | 3 |
 | Alertes SLO | Alertes pertinentes (burn rate, drift, taux de refus) avec runbook, routage par sévérité | 3 |
 | Canary analysé | Garde-fous compris, décision appliquée par Git, rollback démontré | 2 |
-| Rapport + démo | Captures, analyse, démo drift → alerte → ré-entraînement complète | 3 |
+| Rapport + démo | Captures, analyse, démo drift → alerte → ré-entraînement complète | 2 |
+| Mission autonome | Incident silencieux provoqué, rendu visible (métrique, alerte, runbook), alerte déclenchée puis résolue (`reports/mission-m7.md`). | 4 |
 | **Total** | | **20** |
 
 ## Annexe — Troubleshooting
@@ -2285,10 +2312,3 @@ Le script `labs/m7-monitoring/check.sh` vérifie, sans rien modifier et sans por
 
 Variables optionnelles : `NS`, `ISVC`, `MON_NS`, `REGISTRY`. Code retour = nombre de
 vérifications en échec.
-
-> [!NOTE]
-> **Prochaine étape**
-> Module 8 — Gouvernance, sécurité, fairness. Vous allez scanner votre image avec Trivy et
-> votre modèle avec ModelScan, mesurer les disparités de décision par groupe sensible avec
-> Fairlearn (celles que le dashboard suit déjà en production), expliquer les refus avec SHAP
-> et produire une Model Card complète.

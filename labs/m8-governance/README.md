@@ -1895,14 +1895,39 @@ kubectl get "$POD" -n scoring -o yaml | grep -c kube-api-access  # 0 : aucun jet
 | 15 | ExternalSecret synchronisé | `kubectl get externalsecret -n scoring` | `SecretSynced`, `True` | ☐ |
 | 16 | Rapport de conformité | `grep -c '^## ' reports/compliance-ai-act.md` | 5 sections + sources | ☐ |
 
+## Mission autonome (25 min, 2 points)
+
+**Un risque qui reste après le lab.**
+
+Après les étapes de ce lab, il reste forcément un risque : une vulnérabilité encore présente
+dans l'image, un groupe encore défavorisé, une explication que le client ne comprendrait pas,
+un droit trop large dans le cluster… Choisissez **un** risque concret, chiffrez-le, puis
+réduisez-le et mesurez l'effet. Mettez à jour la Model Card ou le rapport de conformité en
+conséquence.
+
+**Règles communes**
+- Aucun code n'est fourni : à vous de trouver la démarche. Documentation officielle des outils,
+  code des labs précédents et `--help` autorisés.
+- Durée visée : 25 minutes en binôme. Les deux noms figurent dans le compte rendu.
+- Livrable : `reports/mission-m8.md`, commité dans la PR du lab, avec quatre sections :
+  1. **Le problème** : ce que vous avez trouvé, en une ou deux phrases ;
+  2. **La démarche** : ce que vous avez essayé, y compris ce qui n'a pas marché ;
+  3. **La preuve** : les commandes et les sorties, **avant** et **après** votre changement ;
+  4. **Les limites** : ce que votre solution ne couvre pas.
+- Tout ce que vérifiait déjà `make check-m8` doit rester vert.
+
+**Notation (2 points)** : risque concret et chiffré (0,5) ; réduction mesurée avant/après
+(1) ; documents mis à jour, compromis expliqué (0,5).
+
 ## Critères d'évaluation (noté sur 10)
 
 | Critère | Description | Points |
 |---|---|---|
-| Sécurité | Trivy avant/après, image distroless construite (Python 3.12, non-root, sans shell), ModelScan interprété (codes retour, skops), RBAC et ExternalSecret appliqués. | 2,5 |
-| Équité | Mesures Fairlearn pour chaque attribut sensible de `dataset.yaml` au seuil du modèle, petits groupes signalés, atténuations comparées et compromis coût/équité argumenté (dont l'expérience « sans l'attribut »). | 2,5 |
-| Explicabilité | Importance globale + 3 explications locales cohérentes, motifs rédigés en clair, test contrefactuel interprété. | 2,5 |
-| Gouvernance | Model Card complète (11 sections, chiffres réels, usages interdits précis), rapport AI Act / RGPD daté et sourcé. | 2,5 |
+| Sécurité | Trivy avant/après, image distroless construite (Python 3.12, non-root, sans shell), ModelScan interprété (codes retour, skops), RBAC et ExternalSecret appliqués. | 2 |
+| Équité | Mesures Fairlearn pour chaque attribut sensible de `dataset.yaml` au seuil du modèle, petits groupes signalés, atténuations comparées et compromis coût/équité argumenté (dont l'expérience « sans l'attribut »). | 2 |
+| Explicabilité | Importance globale + 3 explications locales cohérentes, motifs rédigés en clair, test contrefactuel interprété. | 2 |
+| Gouvernance | Model Card complète (11 sections, chiffres réels, usages interdits précis), rapport AI Act / RGPD daté et sourcé. | 2 |
+| Mission autonome | Risque restant chiffré, réduit et mesuré, documents mis à jour (`reports/mission-m8.md`). | 2 |
 | **Total** | | **10** |
 
 ## Annexe — Troubleshooting
@@ -1949,13 +1974,6 @@ kubectl get "$POD" -n scoring -o yaml | grep -c kube-api-access  # 0 : aucun jet
   (`runAsNonRoot`, `readOnlyRootFilesystem`, `capabilities.drop: [ALL]`).
 - **Suivi en production** : exporter les taux d'acceptation par groupe en métriques
   Prometheus (Lab 7) et alerter sur la dérive de l'équité.
-
-> [!NOTE]
-> **Prochaine étape**
-> Module 9 — LLMOps. Vous allez adapter tout ce qu'on a vu au cas des grands modèles de
-> langage : serving local, base vectorielle pour le RAG, observabilité des chaînes. Les
-> problématiques de gouvernance de ce module y sont encore plus critiques : hallucinations,
-> injections de prompt, confidentialité des documents.
 
 ## Vérification automatique
 

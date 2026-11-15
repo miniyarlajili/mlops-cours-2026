@@ -35,7 +35,7 @@ du tracing (Phoenix) au lieu de simples logs, et une nouvelle surface d'attaque,
 > Le Lab 9 est un lab indépendant : il est noté comme les autres labs, mais il ne fait pas partie
 > du socle vérifié par `make check-m0` … `make check-m8`. Tout son code vit dans le dossier
 > `rag/` de votre fork. Il peut servir de point de départ à l'extension **« rag-projet —
-> Assistant RAG du projet + Ragas en CI »** du catalogue (Module 10) : l'option de l'étape 3.5
+> Assistant RAG du projet + Ragas en CI »** du catalogue du mini-projet : l'option de l'étape 3.5
 > indexe la documentation de votre propre projet.
 
 > [!NOTE]
@@ -1330,12 +1330,6 @@ Dans votre fork, dossier `rag/`, commité et poussé :
   [https://docs.ragas.io](https://docs.ragas.io) · Phoenix
   [https://arize.com/docs/phoenix](https://arize.com/docs/phoenix) · OWASP Top 10 for LLM
   Applications [https://genai.owasp.org/llm-top-10/](https://genai.owasp.org/llm-top-10/)
-
-> [!NOTE]
-> **Prochaine étape**
-> Module 10 — Mini-projet. Appliquer tout ce qu'on a vu à votre projet : le socle construit
-> lab après lab, une extension personnelle (dont « rag-projet », qui prolonge ce lab) et une
-> soutenance avec défi en direct. Livrable final : repo Git + démo live + rapport + model card.
 
 ## Vérification automatique
 

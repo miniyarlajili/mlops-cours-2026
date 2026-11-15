@@ -397,13 +397,13 @@ uv run python packaging/app/verify_onnx.py
 > **Choix d'architecture : le modèle est figé dans l'image au build**
 > On aurait pu laisser l'API télécharger `models:/scoring-model@champion` au démarrage. On
 > préfère exporter le modèle **avant** le `docker build` et le copier dans l'image : (1) une image
-> = une version du modèle, immuable — le tag `1.0.0` désigne toujours le même modèle et le
-> rollback du Lab 5 consiste à redéployer l'image précédente ; (2) le conteneur démarre sans
+> = une version du modèle, immuable — le tag `1.0.0` désigne toujours le même modèle, et revenir
+> en arrière consiste à redéployer l'image précédente ; (2) le conteneur démarre sans
 > réseau ni MLflow, donc vite et même si MLflow est en panne (crucial quand l'autoscaling crée
 > des pods à la volée) ; (3) aucun accès au Registry à donner aux pods ; (4) ce que Trivy et
 > ModelScan analysent est exactement ce qui tourne ; (5) l'image n'embarque ni MLflow ni
 > scikit-learn (plusieurs centaines de Mo). Contrepartie : il faut reconstruire l'image à chaque
-> nouveau modèle — c'est précisément ce qu'automatisera la CI/CD du Module 6.
+> nouveau modèle. À la main, combien de temps et combien d'erreurs possibles ?
 
 ## Étape 2/9 — Écrire le serveur FastAPI (15 min)
 
@@ -420,7 +420,7 @@ Ce qui change par rapport à une API écrite pour un dataset précis :
   **422** détaillée. `null` est accepté : c'est une valeur manquante, que le graphe ONNX impute
   comme l'aurait fait le pipeline (médiane ou modalité la plus fréquente).
 - **Une ou plusieurs demandes** : le corps est `{"instances": [ ... ]}` (jusqu'à `MAX_BATCH`
-  demandes, 1 000 par défaut), comme le protocole v1 de KServe que vous verrez au Lab 5.
+  demandes, 1 000 par défaut).
 - **Réponse** : pour chaque demande, la probabilité de la classe positive (`bad` ici) et la
   décision au seuil (`prediction` = 1 si `probability >= threshold`), plus la version du modèle.
 - **numpy plutôt que pandas** dans `score()` : construire un DataFrame par requête coûtait
@@ -621,8 +621,7 @@ kill %1
 
 ### 2.3 Le contrat de l'API
 
-Les Labs 5 (KServe, Locust), 6 (CI/CD) et 7 (monitoring) s'appuient sur ce contrat : gardez-le
-stable.
+Les labs suivants s'appuient sur ce contrat : gardez-le stable.
 
 | Élément | Valeur |
 |---|---|
@@ -979,8 +978,8 @@ docker stop scoring
 
 > **Sortie attendue :** résumé sans échec (`0(0.00%)`), de quelques centaines à environ 1 000
 > requêtes/s sur un laptop. La latence P95 (de l'ordre de 10 à 50 ms selon la machine) vient
-> surtout de la file d'attente de l'unique worker uvicorn, pas du modèle (0,07 ms) : c'est ce que
-> l'autoscaling du Lab 5 permettra d'absorber.
+> surtout de la file d'attente de l'unique worker uvicorn, pas du modèle (0,07 ms) . Comment absorber un trafic
+> plus fort ?
 
 ## Étape 6/9 — Variante BentoML (15 min)
 
@@ -1307,8 +1306,7 @@ docker stop scoring-from-reg
 ```
 
 > **Sortie attendue :** `{"status":"ok","model_loaded":true}`. L'image est taggée par version,
-> traçable (labels MLflow) et réutilisable par n'importe qui ayant accès au registry. C'est la
-> base du workflow CD du Module 6.
+> traçable (labels MLflow) et réutilisable par n'importe qui ayant accès au registry. 
 
 ### 8.4 Le cluster voit l'image (optionnel, 2 min)
 
@@ -1321,7 +1319,7 @@ kubectl delete pod scoring-smoke
 
 > **Sortie attendue :** `pod/scoring-smoke condition met` et les logs d'uvicorn
 > (`Uvicorn running on http://0.0.0.0:8000`) : le cluster a tiré l'image depuis le registry
-> local, sans `kind load`. C'est ainsi que le Lab 5 la déploiera avec KServe.
+> local, sans `kind load`.
 
 ## Étape 9/9 — Rédiger le rapport (5 min)
 
@@ -1341,8 +1339,8 @@ cp labs/m4-packaging/starter/rapport-m4.md reports/rapport-m4.md
 - **Pistes d'amélioration** : quantization INT8, image distroless, préchargement du modèle dans
   un Init Container…
 
-Commitez ensuite le travail. `packaging/model/` (quelques ko à quelques Mo) est versionné : la CI
-du Module 6 pourra reconstruire l'image sans accès à votre MLflow. Les pickles de démonstration
+Commitez ensuite le travail. `packaging/model/` (quelques ko à quelques Mo) est versionné : n'importe qui
+peut reconstruire l'image sans accès à votre MLflow. Les pickles de démonstration
 sont exclus :
 
 ```bash
@@ -1379,7 +1377,7 @@ puis vous revenez sur `main` : `git switch main && git pull`.
 >
 > Ne relancez pas `export_onnx.py` pour « rattraper » : il exporterait **votre** champion (autre
 > numéro de version) et modifierait `packaging/model/`. Un nouveau modèle ne se commite que pour
-> être publié, par une PR (Lab 6). Rapports et pickles régénérés ne se commitent pas non plus.
+> être publié, par une PR. Rapports et pickles régénérés ne se commitent pas non plus.
 
 ### Checklist de validation
 
@@ -1406,15 +1404,43 @@ puis vous revenez sur `main` : `git switch main && git pull`.
 make check-m4
 ```
 
+## Mission autonome (25 min, 4 points)
+
+**Une image encore plus légère.**
+
+Votre image `scoring-api` pèse environ 330 Mo. Réduisez-la d'**au moins 20 %** sans rien
+changer à ce qu'elle répond : mêmes probabilités sur `packaging/sample_request.py`, même
+`/health`, toujours non-root.
+
+Commencez par mesurer où partent les mégaoctets (couches de l'image, paquets installés), puis
+choisissez vos leviers. Si vous ne trouvez pas 20 %, documentez ce que vous avez obtenu et
+pourquoi vous êtes bloqués : une démarche bien menée vaut plus qu'un chiffre.
+
+**Règles communes**
+- Aucun code n'est fourni : à vous de trouver la démarche. Documentation officielle des outils,
+  code des labs précédents et `--help` autorisés.
+- Durée visée : 25 minutes en binôme. Les deux noms figurent dans le compte rendu.
+- Livrable : `reports/mission-m4.md`, commité dans la PR du lab, avec quatre sections :
+  1. **Le problème** : ce que vous avez trouvé, en une ou deux phrases ;
+  2. **La démarche** : ce que vous avez essayé, y compris ce qui n'a pas marché ;
+  3. **La preuve** : les commandes et les sorties, **avant** et **après** votre changement ;
+  4. **Les limites** : ce que votre solution ne couvre pas.
+- Tout ce que vérifiait déjà `make check-m4` doit rester vert.
+
+**Notation (4 points)** : mesure de départ et analyse de ce qui pèse (1) ; réduction obtenue et
+mesurée (1,5) ; preuve que les prédictions sont identiques et que l'image reste non-root (1) ;
+limites et compromis (0,5).
+
 ## Critères d'évaluation (noté sur 20)
 
 | Critère | Description | Points |
 |---|---|---|
-| Image fonctionnelle | Image optimized build + healthcheck OK + prédictions cohérentes (= scikit-learn), schéma d'entrée généré depuis `dataset.yaml`, 422 sur requête invalide. | 6 |
-| Optimisation taille | Image < 500 Mo, multi-stage, `.dockerignore`, user non-root. | 4 |
-| Benchmark | Script de benchmark + table P50/P95/P99 sur 3 backends. | 4 |
+| Image fonctionnelle | Image optimized build + healthcheck OK + prédictions cohérentes (= scikit-learn), schéma d'entrée généré depuis `dataset.yaml`, 422 sur requête invalide. | 5 |
+| Optimisation taille | Image < 500 Mo, multi-stage, `.dockerignore`, user non-root. | 3 |
+| Benchmark | Script de benchmark + table P50/P95/P99 sur 3 backends. | 3 |
 | Scan sécurité | Trivy + ModelScan lancés, rapports dans `reports/`. | 3 |
-| Rapport | 5 sections rédigées, analyse et recommandation claires. | 3 |
+| Rapport | 5 sections rédigées, analyse et recommandation claires. | 2 |
+| Mission autonome | Image réduite d'au moins 20 % avec prédictions identiques, démarche mesurée (`reports/mission-m4.md`). | 4 |
 | **Total** | | **20** |
 
 ## Annexe — Troubleshooting
@@ -1445,13 +1471,6 @@ make check-m4
 | Conteneur arrêté au démarrage : `NO_SUCHFILE` / `FileNotFoundError` sur `model.onnx` ou `dataset.yaml` | Fichier absent de l'image. | Vérifier les `COPY` du Dockerfile et la liste blanche de `packaging/Dockerfile.dockerignore`. |
 | ModelScan : `argument of type 'NoneType' is not iterable` | ModelScan 0.8.8 ne sait pas lire les pickles écrits par `joblib`. | Pour la démo, sérialiser avec `pickle` (c'est ce que fait `make_pickles.py`). |
 | ModelScan : `skipped` / code retour 3 | Format non pris en charge (ONNX, skops). | Normal : ce n'est pas une erreur (voir 7.2). |
-
-> [!NOTE]
-> **Prochaine étape**
-> Module 5 — Serving & inférence à l'échelle. Vous allez déployer l'image
-> `localhost:5001/scoring-api:1.0.0` sur Kubernetes avec KServe (InferenceService
-> `scoring-model` dans le namespace `scoring`), configurer l'autoscaling, et mesurer les
-> performances sous charge réelle.
 
 ## Vérification automatique
 
