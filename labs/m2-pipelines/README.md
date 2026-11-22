@@ -294,8 +294,8 @@ s'en accommoder :
 On choisit **(b)**. Le code du Lab 1 existe déjà, il est testé et piloté par
 `dataset.yaml` : le recopier dans des composants créerait une deuxième version à maintenir
 (un `prepare.py` pour DVC, un autre pour KFP), qui divergerait au premier changement. Avec une
-image projet, DVC, KFP, Airflow et plus tard la CI (Lab 6) exécutent **le même code**, et
-l'image versionnée (`:1.0.0`) devient l'unité de livraison, comme au Lab 4 pour l'API.
+image projet, DVC, KFP et Airflow exécutent **le même code**, et l'image versionnée (`:1.0.0`)
+devient l'unité de livraison.
 
 Chaque composant fait alors exactement ce que fait une stage de `dvc.yaml` : récupérer ses
 entrées, lancer une commande, publier ses sorties. Seul le transport change :
@@ -314,9 +314,8 @@ Quatre fichiers à écrire : un script de validation (2.2), le pont entre orches
 ### 2.2 Un nouveau script : la validation des données
 
 Le pipeline du cours commence par un **gate** : si le fichier brut ne respecte pas le contrat
-`dataset.yaml`, on s'arrête avant d'entraîner quoi que ce soit (fail-fast). Pour l'instant,
-des contrôles de schéma simples ; le Lab 3 les remplacera par une suite Great Expectations,
-sans changer la façon de lancer le script.
+`dataset.yaml`, on s'arrête avant d'entraîner quoi que ce soit (fail-fast). Ici,
+des contrôles de schéma volontairement simples.
 
 ```python
 # Fichier : src/validate_data.py
@@ -325,8 +324,7 @@ sans changer la façon de lancer le script.
 Gate du pipeline (Lab 2) : si un contrôle échoue, le script sort avec le code 1 et
 l'orchestrateur (DVC, Kubeflow, Airflow, CI) s'arrête AVANT l'entraînement. Les contrôles
 sont des contrôles de schéma simples, tous déduits de dataset.yaml (aucun nom de colonne
-en dur). Le Lab 3 les remplacera par une suite Great Expectations, sans changer
-l'interface :
+en dur). L'interface :
 
     python -m src.validate_data [fichier.csv]      (défaut : raw_path de dataset.yaml)
 
@@ -661,7 +659,7 @@ COPY pipelines/__init__.py pipelines/stage.py pipelines/
 
 # src et pipelines importables depuis n'importe quel dossier, dataset.yaml trouvé partout.
 # Pas d'utilisateur non-root ici : le lanceur KFP écrit les artefacts sous /minio, /s3…
-# à la racine du conteneur (le Lab 4 durcira l'image de serving).
+# à la racine du conteneur.
 ENV PYTHONPATH=/app \
     DATASET_CONFIG=/app/dataset.yaml \
     PYTHONUNBUFFERED=1
@@ -701,8 +699,7 @@ docker run --rm localhost:5001/scoring-pipeline:1.0.0 python -c \
 > **Sortie attendue :** un build de 1 à 2 minutes la première fois (installation des
 > dépendances), quelques secondes ensuite tant que `requirements.txt` ne change pas. Puis
 > `{"name":"scoring-pipeline","tags":["1.0.0"]}` et `german-credit 20`. L'image pèse environ
-> 650 Mo (`docker images localhost:5001/scoring-pipeline`) : on n'a pas cherché à la réduire,
-> le Lab 4 le fera pour l'image de serving.
+> 650 Mo (`docker images localhost:5001/scoring-pipeline`) : on n'a pas cherché à la réduire.
 
 > [!NOTE]
 > **Pourquoi pousser dans le registry ?**
@@ -1093,6 +1090,14 @@ EOF
 
 ## Étape 4/9 — Uploader et exécuter le pipeline sur le cluster (15 min)
 
+> [!IMPORTANT]
+> **Kubeflow et Airflow, pas en même temps**
+> Dans la VM de 12 Go, les runs Kubeflow et Airflow ensemble saturent la mémoire et le disque :
+> les runs deviennent très lents (plus d'une heure). Si Airflow tourne encore (`docker ps | grep
+> airflow`), arrêtez-le pendant les étapes 4 à 6 : `(cd infra/airflow && docker compose down)`.
+> Vous le relancerez à l'étape 7 avec `make airflow`, et vous pourrez alors arrêter Kubeflow
+> le temps des runs Airflow si la VM rame.
+
 ### 4.1 Upload via l'UI KFP
 
 - Ouvrez l'UI KFP sur `http://localhost:8080`.
@@ -1127,8 +1132,8 @@ kubectl -n kubeflow get pods -w | grep scoring
 
 > [!TIP]
 > **Soumettre un run sans l'UI**
-> Le SDK pilote la même API que l'UI (à travers le port-forward de l'étape 1.3). C'est ce
-> qu'utilisera la CI au Lab 6 :
+> Le SDK pilote la même API que l'UI (à travers le port-forward de l'étape 1.3). Le même
+> appel, depuis un script :
 > ```bash
 > python - <<'EOF'
 > import kfp
@@ -1801,8 +1806,10 @@ fusionnez, puis vous revenez sur `main` : `git switch main && git pull`.
 | `kubectl apply -k github.com/...` : erreur de clonage | Pas de `git` ou pas d'accès à GitHub. | Installer `git` ; vérifier le proxy de l'école ; relancer `make kfp` (idempotent). |
 | Pod de step en `ImagePullBackOff` sur `localhost:5001/scoring-pipeline:…` | Image non poussée, ou tag différent de `PIPELINE_IMAGE`. | `docker push localhost:5001/scoring-pipeline:1.0.0` ; `curl localhost:5001/v2/scoring-pipeline/tags/list` ; comparer avec `components.py`. |
 | `Connection reset by peer` ou `Connection refused` sur `localhost:8080` (UI ou SDK) | Le `kubectl port-forward` s'est arrêté : pod de l'UI redémarré ou VM très chargée. Le run, lui, continue dans le cluster. | `make kfp-ui` pour relancer le port-forward, puis recharger la page ; `kubectl -n kubeflow get workflows` pour voir l'état du run. |
+| `make airflow` : `dependency failed to start: container airflow-airflow-apiserver-1 is unhealthy` | L'API Airflow démarre trop lentement (VM chargée, Kubeflow qui tourne à côté, mémoire juste). | `cd infra/airflow && docker compose logs --tail=50 airflow-apiserver` pour voir l'erreur ; `free -h` ; relancer `make airflow` (l'override du cours laisse maintenant 5 min à l'API pour démarrer). |
+| Run Kubeflow qui dure plus d'une heure ; `uptime` très élevé ; `free -h` montre du swap utilisé | Airflow tourne en même temps que Kubeflow : la VM manque de mémoire, échange avec le disque (swap) et tout ralentit. | `(cd infra/airflow && docker compose down)` pendant les runs Kubeflow (encadré de l'étape 4) ; relancer Airflow seulement à l'étape 7. |
 | `TimeoutError: Run timeout` alors que le run finit en vert dans l'UI | Premier run lent : chaque nœud télécharge l'image du pipeline (environ 250 Mo) et l'image `kfp-launcher` ; si des nœuds sont passés `NotReady`, les pods attendent aussi. | `kubectl -n kubeflow get workflows` : si `Succeeded`, le pipeline est bon. Relancer `make pipeline-image` (il copie maintenant l'image dans les nœuds), puis relancer le run : le suivant est bien plus rapide. |
-| Nœuds `NotReady` par moments, pods Kubeflow qui redémarrent ; `uptime` affiche une charge très élevée (plus de 20) alors que `top` montre le CPU presque inactif | Le disque de la VM sature (premier déploiement de Kubeflow : une quinzaine d'images à décompresser), souvent aggravé par l'antivirus Windows qui analyse le disque de la VM. | Attendre que la charge (`uptime`, 1er chiffre) redescende sous 4 et que `kubectl get nodes` montre 3 nœuds `Ready`, puis relancer. Si cela revient : exclure le dossier `C:\Users\<vous>\VirtualBox VMs` de l'analyse Windows Defender. Conseil : lancer `make kfp` chez soi la veille du lab. |
+| Nœuds `NotReady` par moments, pods Kubeflow qui redémarrent ; `uptime` affiche une charge très élevée (plus de 20) alors que `top` montre le CPU presque inactif | Le disque de la VM sature (premier déploiement de Kubeflow : une quinzaine d'images à décompresser), souvent aggravé par l'antivirus Windows qui analyse le disque de la VM. | Attendre que la charge (`uptime`, 1er chiffre) redescende sous 4 et que `kubectl get nodes` montre 3 nœuds `Ready`, puis relancer. Si cela revient : vérifier que VirtualBox n'est pas en mode lent à cause d'Hyper-V (`Select-String -Path "$env:USERPROFILE\VirtualBox VMs\mlops-vm\Logs\VBox.log" -Pattern "fall back to NEM"` : une ligne = mode lent, voir l'annexe Troubleshooting du Lab 0) ; exclure le dossier `C:\Users\<vous>\VirtualBox VMs` de l'analyse Windows Defender. Conseil : lancer `make kfp` chez soi la veille du lab. |
 | Pod `train-model` en `Pending` (*Insufficient cpu*) | Une limit sans request vaut request : 2 CPU demandés. | Garder `set_cpu_request("500m")` ou baisser `set_cpu_limit`. |
 | Step `OOMKilled` | Limite mémoire trop basse pour votre dataset. | Augmenter le `set_memory_limit` du step (étape 6). |
 | `ModuleNotFoundError: No module named 'src'` (dans un pod) | Image construite sans `src/`, ou mauvais `PYTHONPATH`. | Vérifier le Dockerfile et `Dockerfile.dockerignore`, reconstruire avec un nouveau tag. |
@@ -1828,7 +1835,7 @@ fusionnez, puis vous revenez sur `main` : `git switch main && git pull`.
 
 - **Le gate visible dans le DAG** : remplacer la promotion conditionnelle de `src.promote`
   par une branche KFP, `with dsl.If(eval_task.output >= seuil): …`, pour voir la décision
-  dans l'UI (le Lab 6 comparera challenger et champion).
+  dans l'UI.
 - **Parallélisme** : entraîner plusieurs modèles en parallèle avec
   `dsl.ParallelFor(["logistic_regression", "random_forest"])`, puis garder le meilleur.
 - **Planification** : un *Recurring run* KFP (cron `0 3 * * *`) ou `schedule="0 3 * * *"`
@@ -1841,14 +1848,6 @@ fusionnez, puis vous revenez sur `main` : `git switch main && git pull`.
   [KFP — exécution locale](https://www.kubeflow.org/docs/components/pipelines/user-guides/core-functions/execute-kfp-pipelines-locally/),
   [Airflow — Docker Compose](https://airflow.apache.org/docs/apache-airflow/stable/howto/docker-compose/index.html),
   [KubernetesPodOperator](https://airflow.apache.org/docs/apache-airflow-providers-cncf-kubernetes/stable/operators.html).
-
-> [!NOTE]
-> **Prochaine étape**
-> Module 3 — Validation des données et des modèles. Vous remplacerez les contrôles simples de
-> `src/validate_data.py` par une suite Great Expectations (même interface, même gate dans le
-> pipeline), puis vous ajouterez une détection de drift et des tests du modèle (Evidently et
-> tests comportementaux) comme nouveaux steps de `scoring-pipeline`. Nouvelle étape = nouvelle
-> version de l'image.
 
 ## Vérification automatique
 

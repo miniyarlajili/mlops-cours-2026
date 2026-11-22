@@ -4,7 +4,7 @@
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 name: mlops-lab
-# Registry local (localhost:5001) — utilisé dès le Lab 2 (image du pipeline).
+# Registry local (localhost:5001) — pour vos propres images, dans les labs suivants.
 # Le patch n'est plus nécessaire avec les images kind >= v0.27 mais reste inoffensif.
 containerdConfigPatches:
   - |-
@@ -13,13 +13,13 @@ containerdConfigPatches:
 nodes:
   - role: control-plane
     extraPortMappings:
-      - containerPort: 80       # Ingress HTTP (Labs 5+)
+      - containerPort: 80       # Ingress HTTP (labs suivants)
         hostPort: 80
         protocol: TCP
       - containerPort: 443      # Ingress HTTPS
         hostPort: 443
         protocol: TCP
-      - containerPort: 30080    # NodePort Kourier / KServe (Lab 5)
+      - containerPort: 30080    # NodePort réservé à un lab suivant
         hostPort: 30080
         protocol: TCP
   - role: worker

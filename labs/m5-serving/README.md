@@ -382,8 +382,7 @@ curl -s -H "Host: ${ISVC_HOST}" http://localhost:30080/metadata | python3 -m jso
 
 ### 4.4 Depuis un pod du cluster (2 min)
 
-Les autres services du cluster (le pipeline du Lab 6, le générateur de trafic du Lab 7)
-appellent le modèle par son adresse interne, sans passer par le port 30080 :
+Les autres services du cluster appellent le modèle par son adresse interne, sans passer par le port 30080 :
 
 ```bash
 kubectl run -n scoring client-test --rm -i --restart=Never --image=python:3.12-slim -- \
@@ -802,7 +801,7 @@ puis ajoutez cette route juste après celle de `/metadata` :
 ```python
 @app.get("/version")
 def version():
-    # Lab 5 : quelle version a répondu ? (canary, rollback, tests de fumée du Lab 6)
+    # Lab 5 : quelle version a répondu ? (canary, rollback)
     return {"version": API_VERSION, "model_version": MODEL_VERSION}
 ```
 
@@ -934,9 +933,8 @@ kubectl get isvc scoring-model -n scoring
 > Un vrai canary en production combine : traffic splitting (ici) + surveillance automatique
 > des métriques (taux d'erreur, latence, distribution des scores) + rollback automatique en cas
 > de dégradation. Ici, la décision et le `kubectl patch` sont manuels, et l'état du cluster
-> s'éloigne de ce qui est dans Git. Les Modules 6 et 7 automatisent tout cela : le changement de
-> version passe par un commit (GitOps avec Argo CD), et la progression du canary aussi, par des
-> commits (canary KServe piloté par Git, Lab 6), décidée au Lab 7 par l'analyse des métriques.
+> s'éloigne de ce qui est dans Git. Comment garder la trace de chaque changement
+> de version, et décider de la progression du canary sur des faits plutôt qu'à l'œil ?
 
 ## Étape 8/9 — (Optionnel) Triton et BentoML : comparer les serveurs (20 min)
 
@@ -1369,15 +1367,42 @@ fusionnez, puis vous revenez sur `main` : `git switch main && git pull`.
 make check-m5
 ```
 
+## Mission autonome (25 min, 4 points)
+
+**Tenir la charge mieux, sans changer de machine.**
+
+Reprenez le run Locust le plus chargé de l'étape 6. Trouvez **un changement de configuration**
+de votre InferenceService (autoscaling, ressources, concurrence, nombre minimal de répliques…)
+qui améliore la latence P95 ou le taux d'erreur **d'au moins 25 %**, à charge égale.
+
+Formulez d'abord une hypothèse sur ce qui limite les performances, puis changez **un seul
+paramètre à la fois**. Gardez la trace de chaque essai, même ceux qui n'améliorent rien.
+
+**Règles communes**
+- Aucun code n'est fourni : à vous de trouver la démarche. Documentation officielle des outils,
+  code des labs précédents et `--help` autorisés.
+- Durée visée : 25 minutes en binôme. Les deux noms figurent dans le compte rendu.
+- Livrable : `reports/mission-m5.md`, commité dans la PR du lab, avec quatre sections :
+  1. **Le problème** : ce que vous avez trouvé, en une ou deux phrases ;
+  2. **La démarche** : ce que vous avez essayé, y compris ce qui n'a pas marché ;
+  3. **La preuve** : les commandes et les sorties, **avant** et **après** votre changement ;
+  4. **Les limites** : ce que votre solution ne couvre pas.
+- Tout ce que vérifiait déjà `make check-m5` doit rester vert.
+
+**Notation (4 points)** : hypothèse argumentée à partir des mesures (1) ; essais menés un
+paramètre à la fois (1) ; amélioration mesurée dans les mêmes conditions (1,5) ; coût de la
+solution (ressources, démarrage à froid) discuté (0,5).
+
 ## Critères d'évaluation (noté sur 20)
 
 | Critère | Description | Points |
 |---|---|---|
-| Déploiement KServe | KServe installé dans le cluster du cours, ISVC READY, `/predict` fonctionnel via la passerelle, seuil servi = seuil du champion. | 6 |
-| Autoscaling | Autoscaler configuré (KPA sur le débit), scale-up observé sous charge, scale-to-zero mesuré. | 4 |
-| Benchmark | 3 runs Locust, table P50/P95/P99 + RPS + erreurs. | 4 |
+| Déploiement KServe | KServe installé dans le cluster du cours, ISVC READY, `/predict` fonctionnel via la passerelle, seuil servi = seuil du champion. | 5 |
+| Autoscaling | Autoscaler configuré (KPA sur le débit), scale-up observé sous charge, scale-to-zero mesuré. | 3 |
+| Benchmark | 3 runs Locust, table P50/P95/P99 + RPS + erreurs. | 3 |
 | Canary | v2 déployée, split 90/10 vérifié expérimentalement, promotion ou rollback. | 3 |
-| Rapport | 5 sections, analyse honnête du point de saturation. | 3 |
+| Rapport | 5 sections, analyse honnête du point de saturation. | 2 |
+| Mission autonome | Hypothèse, essais un paramètre à la fois, gain de P95 ou d'erreurs mesuré à charge égale (`reports/mission-m5.md`). | 4 |
 | **Total** | | **20** |
 
 ## Annexe — Troubleshooting
@@ -1409,12 +1434,6 @@ make check-m5
 | Port-forward de secours | Passerelle indisponible et besoin d'un accès direct. | `kubectl port-forward -n scoring deploy/scoring-model-predictor-00001-deployment 8001:8000` puis `curl localhost:8001/health` (adapter le numéro de révision ; le port 8080 est pris par l'UI KFP). |
 | Nœud kind plein (`no space left`) | Images accumulées (Triton !). | `docker exec mlops-lab-worker crictl rmi --prune` (idem `mlops-lab-worker2`, `mlops-lab-control-plane`). |
 
-> [!NOTE]
-> **Prochaine étape**
-> Module 6 — CI/CD pour le ML avec Continuous Training. Vous allez automatiser le cycle complet :
-> push Git → tests → build de l'image → déploiement de l'InferenceService `scoring-model`, avec
-> Argo CD pour le GitOps et un ré-entraînement déclenché par la dérive des données.
-
 ## Pour aller plus loin
 
 - **HPA en mode Standard** : un InferenceService créé avec les annotations
@@ -1425,7 +1444,7 @@ make check-m5
   `<nom>-predictor`.
 - **KEDA** : `KSERVE_WITH_KEDA=1 make kserve` installe KEDA v2.21.0. En mode Standard,
   `serving.kserve.io/autoscalerClass: keda` et un bloc `spec.predictor.autoScaling` font créer
-  par KServe un `ScaledObject` ; avec les métriques Prometheus du Lab 7, on peut scaler sur le
+  par KServe un `ScaledObject` ; avec des métriques Prometheus, on peut scaler sur le
   débit réel, ou sur la longueur d'une file de demandes à scorer.
 - **Transformer** : un conteneur `spec.transformer` devant le prédicteur, pour un prétraitement
   qui évoluerait indépendamment du modèle (ici inutile : il est dans le graphe ONNX).

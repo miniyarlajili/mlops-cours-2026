@@ -32,6 +32,50 @@ Evidently, tests comportementaux) avant de l'enregistrer.*
 > - Des **rapports HTML** générés à chaque run et visibles dans l'UI KFP.
 > - La preuve que le pipeline **échoue proprement** sur données corrompues.
 
+## Les notions du lab en 10 minutes (à lire avant de commencer)
+
+Au Lab 2, le pipeline tourne tout seul dans Kubeflow. Mais il fait confiance à tout ce qu'on lui
+donne : si les données sont fausses, il entraîne quand même, et enregistre un mauvais modèle.
+Ce lab ajoute trois **gates** : des étapes de contrôle qui arrêtent le pipeline quand quelque
+chose ne va pas.
+
+![Le Lab 3 en un coup d'œil](img/00-lab3-flux.png)
+
+Un **gate** est une étape comme une autre. S'il échoue, Kubeflow ne lance aucune des étapes qui
+en dépendent : c'est le principe *fail-fast*. Le pipeline du lab en a trois : le contrat des
+données, le drift, et le modèle.
+
+![Les trois gates du pipeline](img/01-gates.png)
+
+Le **contrat de données** dit ce qu'une donnée valide a le droit d'être : les colonnes attendues,
+les bornes, les modalités connues. Avec **Great Expectations**, il devient une suite de règles
+(des *expectations*) générée depuis `dataset.yaml`, versionnée dans Git et vérifiée à chaque run.
+
+![Un contrat de données](img/02-contrat.png)
+
+Le **drift**, c'est quand les nouvelles données ne ressemblent plus à celles de l'entraînement.
+On le mesure colonne par colonne avec deux chiffres : une **p-value** (KS pour les nombres, χ²
+pour les catégories) dit si l'écart est *significatif* ; le **PSI** dit s'il est *important*.
+
+![Le drift](img/03-drift.png)
+
+Enfin, un bon score global ne suffit pas : on teste aussi le **comportement** du modèle, comme on
+teste un logiciel. Le modèle passe un rapport **Evidently** (métriques avec seuils) et des
+**tests comportementaux** pytest avant d'être enregistré.
+
+![Tester le comportement du modèle](img/04-comportement.png)
+
+| Mot | En une phrase |
+|---|---|
+| Gate | Une étape de contrôle : si elle échoue, la suite du pipeline ne tourne pas. |
+| Contrat de données | La liste des règles qu'une donnée valide respecte (colonnes, bornes, modalités). |
+| Expectation | Une règle du contrat dans Great Expectations, par exemple « `age` entre 18 et 100 ». |
+| Drift | Les données changent de distribution par rapport à l'entraînement. |
+| p-value (KS, χ²) | La probabilité d'observer un écart au moins aussi grand si rien n'avait changé : sous 0,05, l'écart est jugé significatif. |
+| PSI | La taille du déplacement d'une distribution : sous 0,1 stable, au-delà de 0,25 drift. |
+| Test comportemental | Un test du modèle sur un comportement attendu (invariance, sens d'un effet). |
+| Rapport HTML | La page produite par chaque gate, visible dans l'interface Kubeflow. |
+
 ## Architecture cible
 
 ```text
@@ -72,7 +116,19 @@ modèle à partir de données ou d'un modèle qui ne respectent pas le contrat.
 > `dvc repro` si le remote DVC de votre cluster ne les a jamais reçus (second membre du binôme,
 > nouveau poste : voir le Lab 1, étape 10.4).
 
-Au début de chaque séance :
+> [!IMPORTANT]
+> **Une fois, avant ce lab : mises à jour du cours et mémoire**
+> Si ce n'est pas déjà fait au Lab 2, récupérez les mises à jour du cours (premier run Kubeflow
+> plus rapide, `make pf` et `make check-mX` plus fiables), dans la VM :
+> `git fetch upstream && git checkout upstream/main -- Makefile infra/airflow labs`, puis
+> `git commit -m "Mise à jour du cours"`. Ce lab n'utilise pas Airflow : arrêtez-le pour libérer
+> environ 4 Go, `(cd infra/airflow && docker compose down)`. Sous Windows, vérifiez que
+> VirtualBox n'est pas en mode lent (dépannage du Lab 0, ligne « VM du cours très lente ») :
+> `Select-String -Path "$env:USERPROFILE\VirtualBox VMs\mlops-vm\Logs\VBox.log" -Pattern "fall back to NEM"`
+> ne doit rien afficher.
+
+Au début de chaque séance, sous Windows, démarrez d'abord la VM dans **PowerShell**, dossier
+`infra\vagrant` : `vagrant up`, puis `vagrant ssh`. Puis, dans la VM :
 
 ```bash
 cd ~/mlops-cours-2026
@@ -83,6 +139,11 @@ set -a && source .env && set +a
 dvc pull                   # données et modèle du Lab 1 s'ils manquent (remote vide : dvc repro)
 make kfp-ui                # UI et API KFP sur http://localhost:8080 (comme au Lab 2)
 ```
+
+Si `kubectl get nodes` échoue après le redémarrage de la VM :
+`docker start mlops-lab-control-plane mlops-lab-worker mlops-lab-worker2 kind-registry`, attendez
+une minute et recommencez. Si l'interface Kubeflow (`localhost:8080`) ou MLflow
+(`localhost:5000`) cesse de répondre pendant la séance, relancez `make kfp-ui` ou `make pf`.
 
 Dans un **nouveau terminal** de la même séance, seules les deux lignes `source .venv/bin/activate`
 et `set -a && source .env && set +a` sont nécessaires (après `cd ~/mlops-cours-2026`) : les
@@ -605,7 +666,7 @@ git commit -m "feat: contrat de données Great Expectations (gx/)"
 
 > [!TIP]
 > **Alternative légère : Pandera**
-> Pour un contrôle de schéma rapide dans un test unitaire (Lab 6), Pandera exprime le même
+> Pour un contrôle de schéma rapide dans un test unitaire, Pandera exprime le même
 > type de contrat en quelques lignes, lui aussi généré depuis `dataset.yaml` :
 > ```bash
 > python - <<'EOF'
@@ -765,7 +826,7 @@ COPY pipelines/__init__.py pipelines/stage.py pipelines/
 
 # src et pipelines importables depuis n'importe quel dossier, dataset.yaml trouvé partout.
 # Pas d'utilisateur non-root ici : le lanceur KFP écrit les artefacts sous /minio, /s3…
-# à la racine du conteneur (le Lab 4 durcira l'image de serving).
+# à la racine du conteneur.
 # DO_NOT_TRACK : ni MLflow ni Evidently n'envoient de télémétrie (GX : gx/*.yml).
 ENV PYTHONPATH=/app \
     DATASET_CONFIG=/app/dataset.yaml \
@@ -810,12 +871,13 @@ grep -n "scoring-pipeline:" pipelines/components.py dags/scoring_dag.py
 docker build -f pipelines/Dockerfile --build-arg VERSION=1.1.0 \
     -t localhost:5001/scoring-pipeline:1.1.0 .
 docker push localhost:5001/scoring-pipeline:1.1.0
+kind load docker-image --name mlops-lab localhost:5001/scoring-pipeline:1.1.0   # copie dans les nœuds
 docker run --rm localhost:5001/scoring-pipeline:1.1.0 python -c \
     "import great_expectations as gx, evidently; print(gx.__version__, evidently.__version__)"
 docker run --rm localhost:5001/scoring-pipeline:1.1.0 ls gx
 ```
 
-> **Sortie attendue :** les deux lignes `grep` affichent `scoring-pipeline:1.1.0`. Le build
+> **Sortie attendue :** les deux lignes `grep` affichent `scoring-pipeline:1.1.0`. `kind load` copie l'image dans les trois nœuds du cluster : sans lui, chaque nœud la télécharge au premier run (plusieurs minutes par nœud). Le build
 > prend 2 à 3 minutes (nouvelles dépendances). Puis `1.23.2 0.7.23`, et `checkpoints`,
 > `expectations`, `great_expectations.yml`, `plugins`, `validation_definitions` (pas
 > d'`uncommitted`). L'image passe d'environ 650 Mo à environ 950 Mo : GX et Evidently
@@ -1321,7 +1383,7 @@ def detect_drift(
 - Les seuils sont des paramètres **sans valeur par défaut** : chaque pipeline les lit dans
   `params.yaml` à la compilation (comme les hyper-paramètres au Lab 2).
 - `fail_on_drift` choisit entre gate bloquant et simple signalement ; le composant **renvoie**
-  le verdict (`True` si drift) : le Lab 6 s'en servira pour déclencher un ré-entraînement.
+  le verdict (`True` si drift), réutilisable par d'autres étapes.
 
 ```python
 # Fichier : pipelines/drift_demo.py
@@ -1452,7 +1514,6 @@ max_violation_rate: 0.05
 
 # Sous-groupes sensibles de dataset.yaml : chaque groupe d'au moins
 # `min_group_size` demandes doit lui aussi atteindre promotion_threshold.
-# (L'équité au sens strict, écarts entre groupes et mitigation, est l'objet du Lab 8.)
 min_group_size: 30
 ```
 
@@ -1467,7 +1528,7 @@ On teste ce que fait le modèle, pas seulement sa métrique globale :
 - directionnels (DIR) : augmenter une variable ne déplace le risque que dans le bon sens.
 Modèle testé : models/model (dvc repro, ou step train du pipeline), sur data/processed/test.csv,
 au seuil de décision du modèle. Les attentes propres au dataset sont dans tests/behavior.yaml.
-Sans modèle local (CI du Lab 6), les tests sont ignorés.
+Sans modèle local, les tests sont ignorés.
 """
 
 from pathlib import Path
@@ -1589,8 +1650,8 @@ python -m pytest -q tests/test_model_behavior.py
 > [!NOTE]
 > **Équité : ce test n'est qu'un plancher**
 > `test_performance_par_sous_groupe` vérifie que chaque groupe sensible atteint le seuil ; il
-> ne mesure ni les écarts entre groupes ni leurs causes. L'équité au sens strict (parité
-> démographique, égalité des chances, mitigation) est l'objet du Lab 8. Les groupes de moins de
+> ne mesure ni les écarts entre groupes ni leurs causes. Les écarts entre groupes ne sont
+> pas mesurés ici. Les groupes de moins de
 > 30 demandes (`foreign_worker = no` : 6 demandes au test) ne sont pas évalués.
 
 ### 6.2 Le rapport Evidently et le gate du modèle
@@ -1969,6 +2030,7 @@ sed -i 's/scoring-pipeline:1.1.0/scoring-pipeline:1.2.0/' \
 docker build -f pipelines/Dockerfile --build-arg VERSION=1.2.0 \
     -t localhost:5001/scoring-pipeline:1.2.0 .
 docker push localhost:5001/scoring-pipeline:1.2.0
+kind load docker-image --name mlops-lab localhost:5001/scoring-pipeline:1.2.0   # copie dans les nœuds
 python -m pipelines.scoring_pipeline
 python -m pipelines.drift_demo
 grep -c "image: localhost:5001/scoring-pipeline:1.2.0" scoring_pipeline.yaml
@@ -1998,7 +2060,7 @@ Dans l'UI KFP :
 > run = client.create_run_from_pipeline_package(
 >     "drift_demo.yaml", experiment_name="scoring", run_name="drift-demo-cli"
 > )
-> print(client.wait_for_run_completion(run.run_id, timeout=1800).state)
+> print(client.wait_for_run_completion(run.run_id, timeout=3600).state)
 > EOF
 > ```
 
@@ -2084,13 +2146,6 @@ kfp-s3 s3 cp --recursive "s3://mlpipeline/v2/artifacts/scoring-pipeline/$RUN_ID/
 pkill -f "port-forward svc/seaweedfs"
 ```
 
-> [!TIP]
-> **Pour aller plus loin : Evidently en continu**
-> Dans le Module 7 (Monitoring), on complétera cette détection de drift ponctuelle par
-> Evidently qui tourne en continu sur le trafic de production, avec des tableaux de bord dans
-> Grafana. Le composant KFP d'aujourd'hui reste utile en mode batch : valider un lot de données
-> avant un ré-entraînement (Lab 6).
-
 Commitez le travail du lab (le bloc *Lab 3* du `.gitignore`, vu à l'étape 1.5, écarte les
 pipelines compilés et les rapports regénérés) :
 
@@ -2124,7 +2179,7 @@ l'approuve ; vous la fusionnez, puis vous revenez sur `main` : `git switch main 
 > client = kfp.Client(host="http://localhost:8080")
 > for package in ("scoring_pipeline.yaml", "test_bad_data.yaml", "drift_demo.yaml"):
 >     run = client.create_run_from_pipeline_package(package, experiment_name="scoring")
->     print(package, client.wait_for_run_completion(run.run_id, timeout=1800).state)
+>     print(package, client.wait_for_run_completion(run.run_id, timeout=3600).state)
 > EOF
 > make check-m3
 > ```
@@ -2132,6 +2187,22 @@ l'approuve ; vous la fusionnez, puis vous revenez sur `main` : `git switch main 
 > `test_bad_data.yaml` doit finir en `FAILED` (le gate bloque les données corrompues), les deux
 > autres en `SUCCEEDED`. Ne commitez rien de régénéré : les YAML compilés et les rapports sont
 > ignorés, `dvc.lock` reste modifié en local (Lab 1).
+
+## Lien avec le mini-projet
+
+- **Jalon J0 (passé)** : si votre tag `j0` n'est pas encore posé, faites-le maintenant
+  (`make check-m10 JALON=j0`, puis `git tag -a j0 -m "J0 Setup" && git push origin j0`).
+- **Extensions : déclaration au plus tard à la fin de la séance du Module 4** (la prochaine).
+  Lisez le catalogue du guide du mini-projet (`labs/m10-capstone/README.md`, section
+  « L'extension personnelle »), choisissez-en une par étudiant (deux extensions différentes
+  dans un binôme), puis ouvrez l'issue « Mini-projet : déclarer mon extension » sur le repo du
+  cours. Plusieurs extensions prolongent directement ce lab : `tests-comportementaux`,
+  `gate-equite`, `drift-predictions`.
+- **Journal de bord** (`docs/journal.md`) : une entrée pour cette séance.
+- **ADR conseillé** : les seuils de vos gates (p-value 0,05, PSI 0,25, 10 % des colonnes,
+  ROC AUC 0,70) et ce qu'ils protègent pour votre cas d'usage.
+- **Dataset libre** : relisez votre suite `gx/` régénérée et réécrivez `tests/behavior.yaml` et
+  le scénario `drift.simulation` de `params.yaml` (encadré de l'étape 6.4).
 
 ## Checklist de validation
 
@@ -2152,21 +2223,55 @@ l'approuve ; vous la fusionnez, puis vous revenez sur `main` : `git switch main 
 | 13 | Metrics KFP loguées | KFP → step → Input/Output | `n_failed`, `n_drifted`, `roc_auc` visibles | ☐ |
 | 14 | Rapport téléchargé | `ls reports/kfp/` | `drift.html` récupéré depuis SeaweedFS | ☐ |
 
+## Mission autonome (25 min, 4 points)
+
+**Un défaut que votre contrat laisse passer.**
+
+Votre suite Great Expectations bloque les données corrompues de `src/simulate.py`. Mais
+laisse-t-elle passer d'autres données manifestement fausses ? Mettez-vous à la place d'un
+fournisseur de données négligent : fabriquez **un fichier réaliste mais faux** (une erreur
+d'unité, une erreur de saisie, un export raté…) que `python -m src.validate_data` **accepte**.
+
+Puis renforcez le contrôle pour qu'il le refuse :
+- soit une règle de plus dans le contrat (dans la suite `gx/`, ou dans ce qui la génère) ;
+- soit un test comportemental de plus, si le défaut concerne le modèle plutôt que les données.
+
+Le fichier propre doit toujours passer.
+
+**Règles communes**
+- Aucun code n'est fourni : à vous de trouver la démarche. Documentation officielle des outils,
+  code des labs précédents et `--help` autorisés.
+- Durée visée : 25 minutes en binôme. Les deux noms figurent dans le compte rendu.
+- Livrable : `reports/mission-m3.md`, commité dans la PR du lab, avec quatre sections :
+  1. **Le problème** : ce que vous avez trouvé, en une ou deux phrases ;
+  2. **La démarche** : ce que vous avez essayé, y compris ce qui n'a pas marché ;
+  3. **La preuve** : les commandes et les sorties, **avant** et **après** votre changement ;
+  4. **Les limites** : ce que votre solution ne couvre pas.
+- Tout ce que vérifiait déjà `make check-m3` doit rester vert.
+
+**Notation (4 points)** : défaut réaliste et bien expliqué (1) ; preuve que l'ancien contrôle
+l'accepte (1) ; nouveau contrôle qui le refuse sans casser les données propres (1,5) ; limites
+honnêtes (0,5).
+
 ## Critères d'évaluation (noté sur 20)
 
 | Critère | Description | Points |
 |---|---|---|
-| Pertinence des expectations | Les checks GE couvrent structure, types, contraintes métier ; générés depuis `dataset.yaml`, pas seulement 2-3 triviaux ; suite versionnée et relue. | 6 |
-| Gate bloquant fonctionnel | Le pipeline échoue réellement sur données corrompues (pas juste un warning) : `prepare-features` n'est jamais lancé. | 5 |
-| Détection de drift | `detect_drift` utilise KS/χ² + PSI (significativité et magnitude), rapport HTML lisible, seuils configurables (`params.yaml`). | 4 |
-| Validation du modèle | `validate_model` dans le pipeline (Evidently avec tests + tests comportementaux) bloque l'enregistrement ; rapport HTML visible dans KFP. | 3 |
+| Pertinence des expectations | Les checks GE couvrent structure, types, contraintes métier ; générés depuis `dataset.yaml`, pas seulement 2-3 triviaux ; suite versionnée et relue. | 5 |
+| Gate bloquant fonctionnel | Le pipeline échoue réellement sur données corrompues (pas juste un warning) : `prepare-features` n'est jamais lancé. | 4 |
+| Détection de drift | `detect_drift` utilise KS/χ² + PSI (significativité et magnitude), rapport HTML lisible, seuils configurables (`params.yaml`). | 3 |
+| Validation du modèle | `validate_model` dans le pipeline (Evidently avec tests + tests comportementaux) bloque l'enregistrement ; rapport HTML visible dans KFP. | 2 |
 | Propreté du code | Code réutilisé dans l'image (pas recopié), imports dans les fonctions, HTML bien formé, metrics logées, aucun nom de colonne en dur. | 2 |
+| Mission autonome | Défaut réaliste que le contrat acceptait, prouvé, puis bloqué par un contrôle ajouté (`reports/mission-m3.md`). | 4 |
 | **Total** | | **20** |
 
 ## Annexe — Troubleshooting
 
 | Symptôme | Cause probable | Solution |
 |---|---|---|
+| Run Kubeflow très long (plus de 20 min), étapes qui attendent | Image du pipeline téléchargée par chaque nœud ; Airflow encore lancé ; VM en mode lent (Hyper-V). | `kind load docker-image --name mlops-lab localhost:5001/scoring-pipeline:<tag>` (étapes 2.3 et 6.4) ; `(cd infra/airflow && docker compose down)` ; vérification Hyper-V du Lab 0. |
+| `Connection reset by peer` ou page blanche sur `localhost:8080` | Le port-forward de l'interface Kubeflow s'est arrêté ; le run, lui, continue dans le cluster. | `make kfp-ui`, puis recharger la page ; `kubectl -n kubeflow get workflows` pour l'état des runs. |
+| `MLflow : …/health` en échec dans `make check-m3`, ou `register-model` qui ne trouve pas MLflow depuis le poste | Port-forward MLflow arrêté (redémarrage de la VM). | `make pf` (il attend que MLflow soit prêt), puis `curl -s localhost:5000/health`. |
 | `import great_expectations` très lent | GX 1.x s'importe en 3 s environ. Pas un bug. | Normal. Juste attendre. |
 | `AttributeError: … has no attribute 'sources'` (ou `add_or_update_expectation_suite`, `run_checkpoint`) | Code écrit pour GX 0.x. | API 1.x : `context.data_sources`, `context.suites`, `ValidationDefinition`, `Checkpoint.run()` (tableau de 1.1). |
 | `DataContextRequiredError` en construisant une suite | GX 1.x exige un contexte actif pour `suite.add_expectation()`. | Appeler `gx.get_context()` d'abord (comme `save_suite`, qui crée la suite après le contexte). |
@@ -2205,22 +2310,16 @@ l'approuve ; vous la fusionnez, puis vous revenez sur `main` : `git switch main 
   les échecs `critical`.
 - **L'invariance qui échoue** : ajoutez `own_telephone` (avec `max_flip_rate: 0.05`) dans
   `tests/behavior.yaml` : 9 % des décisions changent. Le modèle utilise un indicateur de
-  richesse des années 1970 ; faut-il le garder ? (Le Lab 8 outillera ce genre de discussion.)
+  richesse des années 1970 ; faut-il le garder ?
 - **Le gate dans DVC** : ajouter une stage `validate` à `dvc.yaml` (`python -m
   src.validate_data`, dépendances `data/raw/dataset.csv` et `gx/`) et faire dépendre
   `prepare` de son rapport : `dvc repro` refusera lui aussi les données corrompues.
-- **Pandera en CI** : transformer l'encadré Pandera de 1.5 en test pytest du Lab 6.
+- **Pandera en test unitaire** : transformer l'encadré Pandera de 1.5 en test pytest.
 - Documentation :
   [GX Core](https://docs.greatexpectations.io/docs/core/introduction/),
   [Evidently — Reports](https://docs.evidentlyai.com/docs/library/report),
   [KFP — artifacts](https://www.kubeflow.org/docs/components/pipelines/user-guides/data-handling/artifacts/),
   [CheckList (Ribeiro et al., ACL 2020)](https://aclanthology.org/2020.acl-main.442/).
-
-> [!NOTE]
-> **Prochaine étape**
-> Module 4 — Conteneurisation & packaging des modèles. Vous allez prendre le modèle validé
-> aujourd'hui, le convertir en ONNX, le packager dans une image Docker optimisée (< 500 Mo) et
-> benchmarker sa latence. C'est le préalable au serving du Module 5.
 
 ## Vérification automatique
 

@@ -189,9 +189,8 @@ obtenus sur le dataset par défaut.
 
 ## Étape 1/10 — Le contrat de données : credit scoring (15 min)
 
-Ce lab pose le **projet fil rouge** du cours : vous allez le faire grandir de module en module
-(pipeline Kubeflow au Lab 2, validation au Lab 3, API au Lab 4, serving au Lab 5, CI/CD au Lab 6,
-monitoring au Lab 7, gouvernance au Lab 8). On travaille directement à la racine de votre fork :
+Ce lab pose le **projet fil rouge** du cours : vous allez le faire grandir de module en module. On
+travaille directement à la racine de votre fork :
 pas de nouveau repo.
 
 ### 1.1 Le cas métier
@@ -217,8 +216,7 @@ Trois conséquences pour tout le cours :
   risqué (**ROC AUC**, indépendante du seuil de décision), et on **mesure** la décision avec le
   **coût métier** (5 × FN + 1 × FP), prise au seuil qui minimise ce coût (pas à 0,5, étape 4.4).
 - Le modèle touche des **attributs sensibles** (âge, statut personnel, travailleur étranger). Le
-  scoring de crédit est un système « à haut risque » au sens de l'AI Act européen : l'équité et
-  l'explicabilité seront traitées au Lab 8.
+  scoring de crédit est un système « à haut risque » au sens de l'AI Act européen.
 
 ### 1.2 Lire le contrat : `dataset.yaml`
 
@@ -276,7 +274,7 @@ features:
     - own_telephone
     - foreign_worker
 
-# Attributs sensibles : analysés au Lab 8 (équité) et surveillés au Lab 7.
+# Attributs sensibles : traités à part dans les labs suivants.
 # « bins » : découpage d'un attribut numérique en groupes (bornes, labels).
 sensitive:
   - column: age
@@ -302,13 +300,13 @@ split:
 
 | Clé | Rôle | Utilisée par |
 |---|---|---|
-| `name`, `description`, `source` | Identité et provenance (licence, citation) du dataset. | Tags MLflow, model card (Lab 8) |
+| `name`, `description`, `source` | Identité et provenance (licence, citation) du dataset. | Tags MLflow, documentation du modèle |
 | `raw_path` | Fichier brut produit par `src/download.py`, versionné par DVC. | Download, prepare, DVC |
 | `target.column` / `positive_class` | La cible et la classe « à risque » à détecter (`bad`), encodée 1. | Tous les scripts |
 | `features.numeric` / `categorical` | Les variables explicatives et leur type : elles déterminent le prétraitement (standardisation ou one-hot). | Prepare, train, API, Feast |
-| `sensitive` | Attributs sensibles ; `bins`/`labels` regroupent l'âge en `<25` / `>=25`. | Équité (Lab 8), monitoring (Lab 7) |
+| `sensitive` | Attributs sensibles ; `bins`/`labels` regroupent l'âge en `<25` / `>=25`. | Analyses par groupe (labs suivants) |
 | `metrics.primary` | Métrique de sélection et de promotion des modèles (`roc_auc`). | Grid search, promote, CI |
-| `metrics.promotion_threshold` | Seuil de qualité : en dessous, un modèle n'est jamais promu `@champion`. | Promote, CI (Lab 6) |
+| `metrics.promotion_threshold` | Seuil de qualité : en dessous, un modèle n'est jamais promu `@champion`. | Promote |
 | `metrics.cost_matrix` | Coût d'un faux négatif / faux positif. | Coût métier |
 | `split` | Proportion de test et graine du découpage train/test. | Prepare |
 
@@ -326,7 +324,7 @@ qui le valide et expose une API typée. Vous allez l'utiliser dans tous les labs
 | `cfg.read_xy(path)` | `X`, `y` lus depuis un CSV préparé, numériques convertis en `float64` (le type attendu par le modèle). |
 | `cfg.business_cost(y_true, y_pred)` | Le coût métier selon `cost_matrix`. |
 | `cfg.cost_threshold(k)` | Le seuil de décision qui minimise le coût métier (étape 4.4). |
-| `cfg.sensitive_frame(df)` | Le groupe de chaque ligne pour chaque attribut sensible (Lab 8). |
+| `cfg.sensitive_frame(df)` | Le groupe de chaque ligne pour chaque attribut sensible. |
 | `cfg.primary_metric`, `cfg.promotion_threshold` | La métrique de sélection et le seuil de promotion. |
 
 ### 1.4 Télécharger les données
@@ -413,8 +411,7 @@ yes             963      0.31
 ```
 
 Trois constats à garder en tête : la cible est **déséquilibrée** (70/30) ; les moins de 25 ans
-sont nettement plus souvent `bad` (41 % contre 28 %), un modèle risque donc de les pénaliser
-(Lab 8) ; certains groupes sont **minuscules** (37 travailleurs non étrangers) : toute métrique
+sont nettement plus souvent `bad` (41 % contre 28 %), un modèle risque donc de les pénaliser ; certains groupes sont **minuscules** (37 travailleurs non étrangers) : toute métrique
 calculée sur eux sera très bruitée.
 
 > [!NOTE]
@@ -757,7 +754,7 @@ Quelques choix à comprendre :
 
 - **Pas de feature engineering ici** : le prétraitement (imputation, standardisation, one-hot)
   fait partie du **modèle** (`cfg.build_preprocessor()`, étape 4.3). Le modèle enregistré prend
-  donc en entrée les colonnes **brutes** : l'API du Lab 4 n'aura rien à recoder, ce qui supprime
+  donc en entrée les colonnes **brutes** : toute application qui l'utilisera n'aura rien à recoder, ce qui supprime
   une source classique de *training/serving skew*.
 - **Split stratifié** : 30 % de `bad` dans le train comme dans le test.
 - **`request_id`** : German Credit n'a pas d'identifiant de demande. Il en faut un pour le
@@ -1000,7 +997,7 @@ mauvais payeurs pèsent `k = n_good / n_bad = 560/240 ≈ 2,33` fois plus à l'e
 cotes `p/(1 − p)` du modèle sont multipliées par `k` et le seuil équivalent remonte à
 `C_FP·k / (C_FP·k + C_FN) ≈ 0,318`. C'est ce que calcule `decision_threshold()` avec
 `cfg.cost_threshold(k)` ; le seuil est loggé (`decision_threshold`) et rangé dans les
-métadonnées du modèle, pour que l'API du Lab 4 décide exactement comme l'évaluation.
+métadonnées du modèle, pour qu'une application décide exactement comme l'évaluation.
 
 ### 4.5 Smoke test
 
@@ -1550,8 +1547,8 @@ python -m src.promote --filter "tags.launched_by = 'dvc'"
 > **Le seuil n'est pas une comparaison**
 > La version 3 (0,8094) remplace la version 1 (0,8095) : `promote.py` vérifie un seuil
 > **absolu**, il ne compare pas le candidat au champion en place. Ici c'est voulu (la version 3
-> coûte 108 au lieu de 113). Au Lab 6, le pipeline d'entraînement continu ajoutera la
-> comparaison challenger / champion avant toute promotion.
+> coûte 108 au lieu de 113). Est-ce suffisant en production ? À vous de
+> juger.
 
 Commitez cet état (le commit sert de référence pour les comparaisons suivantes) :
 
@@ -1822,8 +1819,8 @@ git commit -m "feat: feature store Feast (request_features, scoring_v1)"
 > **Et ensuite ?**
 > Les labs suivants continuent de lire `data/processed/*.csv` pour rester simples ; ce feature
 > store est votre premier contact avec Feast. Une extension du mini-projet peut le brancher
-> sur l'API (Lab 4) : l'appelant n'envoie plus que `request_id`, l'API récupère les features en
-> ligne.
+> sur un service de prédiction : l'appelant n'envoie plus que `request_id`, le service récupère
+> les features en ligne.
 
 ## Étape 10/10 — Tester la reproductibilité complète (5 min)
 
@@ -2079,11 +2076,8 @@ Ce lab est la première brique du projet du binôme (guide du mini-projet,
   [German Credit (UCI)](https://archive.ics.uci.edu/dataset/144/statlog+german+credit+data).
 
 > [!NOTE]
-> **Prochaine étape**
-> Module 2 — Pipelines ML & orchestration. Vous allez transformer le pipeline DVC de ce lab en un
-> pipeline Kubeflow natif Kubernetes (`scoring-pipeline`), avec des composants, des artefacts
-> typés et un enregistrement dans la même expérience MLflow `scoring`. Gardez ce repo en état :
-> il est votre point de départ.
+> **Avant de passer à la suite**
+> Gardez ce repo en état : il est votre point de départ.
 
 ## Vérification automatique
 

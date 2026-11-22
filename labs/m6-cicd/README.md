@@ -492,8 +492,7 @@ spec:
 > Deux clés suffisent pour piloter la prod : l'image (`newName`/`newTag` dans
 > `kustomization.yaml`) et la part du canary (`canaryTrafficPercent` dans `canary.yaml`). Un
 > fichier = une décision : un `git log -- k8s/overlays/prod/canary.yaml` raconte l'historique
-> des promotions et des retours arrière. Le Lab 7 modifiera ce même fichier après analyse des
-> métriques.
+> des promotions et des retours arrière.
 
 Enfin les deux Applications Argo CD (on les appliquera à l'étape 4 ; ne remplacez
 `VOTRE_USER` qu'à ce moment-là) :
@@ -885,8 +884,8 @@ Ce qui a changé par rapport à l'ancien énoncé, et pourquoi :
 - **Actions à jour** : `actions/checkout@v7`, `docker/setup-buildx-action@v4`,
   `docker/login-action@v4`, `docker/build-push-action@v7` (dernières versions majeures,
   octobre 2026). Une action **tierce** est épinglée par SHA de commit, avec la version en
-  commentaire : un tag peut être déplacé par un attaquant, un SHA non (le Lab 8 revient sur
-  l'incident `trivy-action` de mars 2026). Astral ne publie d'ailleurs plus de tag majeur
+  commentaire : un tag peut être déplacé par un attaquant, un SHA non (voir l'incident
+  `trivy-action` de mars 2026). Astral ne publie d'ailleurs plus de tag majeur
   (`v10`) pour `setup-uv`.
 - **`uv sync` avec `UV_LOCKED=1`** : la CI installe exactement `uv.lock` et échoue s'il n'est
   plus à jour (plus de `pip install uv`, ni de Python 3.11).
@@ -1169,7 +1168,7 @@ kubectl get isvc scoring-model -n scoring -w      # Ctrl-C après le retour à 1
 
 > **Sortie attendue :** `PREV 50` / `LATEST 50` quelques secondes, puis, en moins de 70 s,
 > retour à `LATEST 100` : Argo CD a constaté l'écart avec Git et l'a annulé. Désormais, **tout
-> changement passe par un commit** (le Lab 8 le rappellera pour le ServiceAccount de l'API).
+> changement passe par un commit**.
 
 ## Étape 5/9 — Déclencher un déploiement par git push (10 min)
 
@@ -1222,7 +1221,7 @@ git switch main && git pull && git switch -c lab/m6-ct
 
 ### 6.1 Le principe
 
-Dans un vrai déploiement, un job de monitoring (Lab 7) compare régulièrement les données
+Dans un vrai déploiement, un job de monitoring compare régulièrement les données
 reçues en production aux données d'entraînement et émet un événement quand elles dérivent.
 Ici, on fabrique un lot « récent » avec une dérive, on le compare à la référence avec
 **Evidently 0.7**, et on envoie l'événement à un **webhook** qui décide de ré-entraîner.
@@ -1263,7 +1262,7 @@ Depuis la racine du repo, .env chargé, `make pf` et port-forward de KFP (8080) 
   simulate   fabrique un lot récent étiqueté, avec une dérive (data/drift/current.csv)
   detect     rapport Evidently 0.7 (référence = train.csv), rangé dans MLflow, puis POST
              de l'événement au webhook
-  send       POST d'un événement déjà calculé (fichier JSON, ex. produit par le Lab 7)
+  send       POST d'un événement déjà calculé (fichier JSON produit par un autre outil)
   serve      le webhook : décide, lance ct-pipeline dans KFP, suit le run et, si la gate
              a promu un nouveau @champion, lance la mise en production (pipelines/gitops.py)
 """
@@ -1300,7 +1299,7 @@ WEBHOOK_URL = os.getenv("CT_WEBHOOK_URL", f"http://localhost:{PORT}/drift")
 MIN_DRIFT_SHARE = float(os.getenv("CT_MIN_DRIFT_SHARE", "0.1"))  # >= 10 % des variables
 COOLDOWN_SECONDS = int(os.getenv("CT_COOLDOWN_SECONDS", "600"))
 AUTO_RELEASE = os.getenv("CT_AUTO_RELEASE", "1") == "1"  # mise en prod après promotion
-AUTO_PROMOTE = os.getenv("CT_AUTO_PROMOTE", "1") == "1"  # 0 : canary laissé au Lab 7
+AUTO_PROMOTE = os.getenv("CT_AUTO_PROMOTE", "1") == "1"  # 0 : canary laissé à 10 %
 LOCAL_CI = os.getenv("CT_LOCAL_CI", "0") == "1"  # 1 : build local au lieu de GitHub
 
 cfg = load_config()
@@ -1585,7 +1584,6 @@ Points clés :
 
 - **`detect`** produit l'événement (part et liste des variables en dérive) à partir du
   rapport Evidently, range rapport et lot dans MLflow (`data_uri = runs:/…`), puis l'envoie.
-  Le Lab 7 enverra le même événement depuis son job de monitoring.
 - **Le webhook décide** : seuil (`CT_MIN_DRIFT_SHARE`, 10 % des variables), un seul
   ré-entraînement à la fois, 10 min minimum entre deux (une alerte qui boucle ne lance pas
   dix pipelines). Le producteur rapporte, le webhook décide.
@@ -1915,7 +1913,7 @@ Ce qu'il faut retenir :
 > modèle sous le seuil ou plus coûteux que le champion ; (2) la mise en prod passe par Git,
 > donc par la CI (tests, test de fumée) puis par staging ; (3) la prod ne reçoit d'abord que
 > 10 % du trafic (étape 8). En production réelle, et pour un modèle de crédit (haut risque au
-> sens de l'AI Act, Lab 8), on ajouterait une validation humaine : le bot ouvre une PR au lieu
+> sens de l'AI Act), on ajouterait une validation humaine : le bot ouvre une PR au lieu
 > de pousser sur `main`.
 
 ### 7.2 Compiler et tester
@@ -2175,13 +2173,6 @@ uv run python -m pipelines.gitops promote --push
 | Promotion | `k8s/overlays/prod/canary.yaml` | `canaryTrafficPercent` | 100 |
 | Retour arrière | `k8s/overlays/prod/canary.yaml` | `canaryTrafficPercent` | 0 |
 
-> [!NOTE]
-> **Ce que le Lab 7 ajoutera**
-> Ici, c'est vous qui décidez de promouvoir. Au Lab 7, une analyse automatique comparera les
-> métriques Prometheus de la nouvelle révision et de la précédente (erreurs, latence,
-> distribution des scores), puis appellera les mêmes commandes : `canary 50`, `promote` ou
-> `rollback`. La décision reste un commit.
-
 ## Étape 9/9 — Démo de bout en bout + rapport (15 min)
 
 ### 9.1 Le bot en mode automatique
@@ -2197,8 +2188,8 @@ Après une promotion par la gate, le webhook appelle `gitops.release` : export d
 commit de `packaging/model/` (dans une copie de travail jetable, la vôtre n'est pas touchée),
 attente de la CI, vérification de staging (`/version` + prédiction), canary de 10 % en prod,
 **analyse naïve** (50 prédictions sur la nouvelle révision, aucune erreur tolérée), puis
-promotion à 100 % ou retour arrière. Le Lab 7 remplacera cette analyse naïve par une vraie
-comparaison de métriques (`CT_AUTO_PROMOTE=0` laisse alors le canary à 10 %).
+promotion à 100 % ou retour arrière. Cette analyse est volontairement naïve : que
+faudrait-il mesurer pour décider vraiment ? (`CT_AUTO_PROMOTE=0` laisse le canary à 10 %.)
 
 ### 9.2 Quatre terminaux
 
@@ -2314,13 +2305,41 @@ complet, et `make check-m6` se lance de là.
 make check-m6
 ```
 
+## Mission autonome (25 min, 4 points)
+
+**Une régression que votre chaîne ne voit pas.**
+
+Votre CI teste l'API et vos gates contrôlent le modèle. Trouvez une modification qui casse
+quelque chose d'important **et que la chaîne laisse pourtant passer jusqu'au déploiement** :
+une réponse de l'API qui change de format, un seuil de décision qui dérive, un champ qui
+disparaît…
+
+Faites-la sur une branche, montrez le run vert qui n'aurait pas dû l'être, puis ajoutez le
+contrôle qui la bloque (un test, une étape du workflow, une condition de gate). Montrez enfin
+le run rouge sur la même modification, et le run vert une fois la modification annulée.
+
+**Règles communes**
+- Aucun code n'est fourni : à vous de trouver la démarche. Documentation officielle des outils,
+  code des labs précédents et `--help` autorisés.
+- Durée visée : 25 minutes en binôme. Les deux noms figurent dans le compte rendu.
+- Livrable : `reports/mission-m6.md`, commité dans la PR du lab, avec quatre sections :
+  1. **Le problème** : ce que vous avez trouvé, en une ou deux phrases ;
+  2. **La démarche** : ce que vous avez essayé, y compris ce qui n'a pas marché ;
+  3. **La preuve** : les commandes et les sorties, **avant** et **après** votre changement ;
+  4. **Les limites** : ce que votre solution ne couvre pas.
+- Tout ce que vérifiait déjà `make check-m6` doit rester vert.
+
+**Notation (4 points)** : régression crédible et dangereuse en production (1) ; preuve qu'elle
+passait (1) ; contrôle ajouté qui la bloque, run rouge à l'appui (1,5) ; limites (0,5).
+
 ## Critères d'évaluation (noté sur 20)
 
 | Critère | Description | Points |
 |---|---|---|
-| CI GitHub Actions | Workflow au vert : lint, tests (API avec mini-modèle, manifests, CT), build, test de fumée, push GHCR, déploiement de staging par commit. | 6 |
-| CD avec Argo CD | Deux Applications synchronisées automatiquement (selfHeal), prod reprise sans rupture, canary et promotion par commits. | 6 |
-| CT fonctionnel | Webhook déclenché par un rapport Evidently, pipeline KFP avec gate (métrique + coût), nouveau modèle en prod sans intervention, rapport avec le temps du cycle. | 8 |
+| CI GitHub Actions | Workflow au vert : lint, tests (API avec mini-modèle, manifests, CT), build, test de fumée, push GHCR, déploiement de staging par commit. | 5 |
+| CD avec Argo CD | Deux Applications synchronisées automatiquement (selfHeal), prod reprise sans rupture, canary et promotion par commits. | 5 |
+| CT fonctionnel | Webhook déclenché par un rapport Evidently, pipeline KFP avec gate (métrique + coût), nouveau modèle en prod sans intervention, rapport avec le temps du cycle. | 6 |
+| Mission autonome | Régression qui passait la chaîne, prouvée, puis bloquée par un contrôle ajouté (`reports/mission-m6.md`). | 4 |
 | **Total** | | **20** |
 
 ## Annexe — Troubleshooting
@@ -2349,13 +2368,6 @@ make check-m6
 | `release` : `Délai dépassé : CI GitHub Actions du commit …` | CI rouge ou très lente. | `gh run view --log-failed` ; corriger puis relancer `uv run python -m pipelines.gitops release`. |
 | Staging ne répond pas (`servi : None`) | Scale-to-zero : premier démarrage, ou révision en échec. | Relancer `gitops status` ; `kubectl get isvc -n scoring-staging`. |
 
-> [!NOTE]
-> **Prochaine étape**
-> Module 7 — Monitoring et observabilité ML. Vous allez instrumenter l'API avec Prometheus et
-> Grafana, surveiller la dérive avec Evidently en continu, et analyser automatiquement le
-> canary pour décider de la promotion ou du retour arrière. La dérive de ce lab sera alors
-> mesurée sur le trafic, et non simulée.
-
 ## Pour aller plus loin
 
 - **Tester la gate** : `simulate --shuffle-labels` mélange les étiquettes du lot récent ;
@@ -2366,8 +2378,7 @@ make check-m6
   le rapport de la gate en description ; la prod n'avance qu'au merge.
 - **App of apps** : une Application Argo CD qui gère `k8s/argocd-app.yaml` lui-même.
 - **Bot dans le cluster** : le webhook en Deployment, avec une GitHub App limitée au dépôt.
-- **Promotion progressive** : 10 → 50 → 100 % avec une pause et une analyse à chaque palier
-  (Lab 7).
+- **Promotion progressive** : 10 → 50 → 100 % avec une pause et une analyse à chaque palier.
 - **Extensions du mini-projet** liées à ce lab : `retrain-planifie` (ré-entraînement planifié),
   `shadow`, `ab-test`, `drift-predictions` (catalogue : `labs/m10-capstone/README.md`).
 
